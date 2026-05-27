@@ -1,0 +1,185 @@
+@page "/reports"
+@using SmartPark.Services
+@using SmartPark.Models
+@inject ParkingRecordService RecordService
+
+<PageTitle>Parking Reports - SmartPark</PageTitle>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">
+            <MudIcon Icon="@Icons.Material.Filled.Assessment" Size="Size.Small" />
+            Insights
+        </div>
+        <h1 class="page-title">Parking reports</h1>
+        <p class="page-subtitle">Review completed sessions with clean operational metrics and export-ready detail.</p>
+    </div>
+    <div class="page-actions">
+        <button class="btn btn-success" @onclick="ExportReport" disabled="@(completedRecords.Count == 0)">
+            <MudIcon Icon="@Icons.Material.Filled.IosShare" Size="Size.Small" />
+            Export Report
+        </button>
+    </div>
+</div>
+
+<div class="grid-3 mb-4">
+    <div class="stats-card primary">
+        <div class="stats-top">
+            <div class="stats-label">Completed Sessions</div>
+            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.TaskAlt" /></div>
+        </div>
+        <div class="stats-number">@completedRecords.Count</div>
+        <div class="stats-trend">Total recorded exits</div>
+    </div>
+
+    <div class="stats-card success">
+        <div class="stats-top">
+            <div class="stats-label">Average Duration</div>
+            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.Timer" /></div>
+        </div>
+        <div class="stats-number">@AverageDurationText</div>
+        <div class="stats-trend">Across completed sessions</div>
+    </div>
+
+    <div class="stats-card info">
+        <div class="stats-top">
+            <div class="stats-label">Total Duration</div>
+            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.QueryStats" /></div>
+        </div>
+        <div class="stats-number">@TotalDurationText</div>
+        <div class="stats-trend">Accumulated parking time</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="panel-heading">
+            <div>
+                <h2 class="section-title">Completed parking sessions</h2>
+                <div class="muted-text">Only sessions with entry and exit times are included.</div>
+            </div>
+            <span class="badge bg-success">@completedRecords.Count completed</span>
+        </div>
+
+        @if (completedRecords.Count == 0)
+        {
+            <div class="empty-state">
+                <MudIcon Icon="@Icons.Material.Filled.Assessment" Color="Color.Primary" Size="Size.Large" />
+                <strong>No completed parking sessions found</strong>
+                <p>Reports populate once vehicles are checked out.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-shell">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Vehicle Number</th>
+                                <th>Owner Name</th>
+                                <th>Slot Number</th>
+                                <th>Entry Time</th>
+                                <th>Exit Time</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < completedRecords.Count; i++)
+                            {
+                                var record = completedRecords[i];
+                                <tr>
+                                    <td>@(i + 1)</td>
+                                    <td><span class="vehicle-plate">@record.VehicleNumber</span></td>
+                                    <td>@record.OwnerName</td>
+                                    <td><span class="badge bg-primary">Slot @record.ParkingSlot?.SlotNumber</span></td>
+                                    <td>@record.EntryTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td>@record.ExitTime?.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td>@FormatDuration(record.Duration)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ParkingRecord> completedRecords = new();
+
+    private TimeSpan TotalDuration => completedRecords
+        .Where(record => record.Duration.HasValue)
+        .Aggregate(TimeSpan.Zero, (total, record) => total + record.Duration!.Value);
+
+    private string TotalDurationText => completedRecords.Count == 0 ? "0h" : FormatDuration(TotalDuration);
+
+    private string AverageDurationText
+    {
+        get
+        {
+            var recordsWithDuration = completedRecords.Where(record => record.Duration.HasValue).ToList();
+            if (recordsWithDuration.Count == 0)
+            {
+                return "0h";
+            }
+
+            var averageTicks = (long)recordsWithDuration.Average(record => record.Duration!.Value.Ticks);
+            return FormatDuration(TimeSpan.FromTicks(averageTicks));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadCompletedRecords();
+        }
+        catch (Exception ex)
+        {
+            completedRecords = new();
+            Console.WriteLine($"Failed to load reports: {ex.Message}");
+        }
+    }
+
+    private async Task LoadCompletedRecords()
+    {
+        completedRecords = await RecordService.GetCompletedRecordsAsync();
+    }
+
+    private void ExportReport()
+    {
+        Console.WriteLine("=== PARKING REPORT ===");
+        Console.WriteLine($"Generated: {DateTime.Now}");
+        Console.WriteLine($"Total Completed Sessions: {completedRecords.Count}");
+        Console.WriteLine();
+
+        foreach (var record in completedRecords)
+        {
+            Console.WriteLine($"Vehicle: {record.VehicleNumber} | Owner: {record.OwnerName}");
+            Console.WriteLine($"Slot: {record.ParkingSlot?.SlotNumber}");
+            Console.WriteLine($"Entry: {record.EntryTime} | Exit: {record.ExitTime}");
+            Console.WriteLine($"Duration: {FormatDuration(record.Duration)}");
+            Console.WriteLine("---");
+        }
+    }
+
+    private static string FormatDuration(TimeSpan? duration)
+    {
+        if (duration == null)
+        {
+            return "-";
+        }
+
+        return FormatDuration(duration.Value);
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration.TotalHours >= 24
+            ? $"{(int)duration.TotalDays}d {duration.Hours}h {duration.Minutes}m"
+            : $"{duration.Hours}h {duration.Minutes}m";
+    }
+}

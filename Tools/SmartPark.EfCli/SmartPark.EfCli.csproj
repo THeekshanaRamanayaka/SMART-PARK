@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Data/SmartParkDbContext.cs" Link="Data/SmartParkDbContext.cs" />
+    <Compile Include="../../Data/SmartParkDbContextFactory.cs" Link="Data/SmartParkDbContextFactory.cs" />
+    <Compile Include="../../Models/AppUser.cs" Link="Models/AppUser.cs" />
+    <Compile Include="../../Models/ParkingRecord.cs" Link="Models/ParkingRecord.cs" />
+    <Compile Include="../../Models/ParkingSlot.cs" Link="Models/ParkingSlot.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

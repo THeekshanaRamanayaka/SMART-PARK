@@ -1,0 +1,79 @@
+﻿<div class="nav-header">
+    <div class="brand-container">
+        <div class="brand-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM10 6a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1a1 1 0 0 0 2 0V9h4v1a1 1 0 0 0 2 0V9h2v10z" fill="currentColor"/>
+                <circle cx="12" cy="15" r="2" fill="currentColor"/>
+            </svg>
+        </div>
+        <div class="brand-text">
+            <h1 class="brand-title">SmartPark</h1>
+            <p class="brand-subtitle">Parking Management</p>
+        </div>
+    </div>
+</div>
+
+<nav class="nav-menu">
+    <div class="nav-section">
+        <div class="nav-section-title">Overview</div>
+        <NavLink class="nav-item" href="" Match="NavLinkMatch.All">
+            <div class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="currentColor"/>
+                </svg>
+            </div>
+            <span class="nav-text">Dashboard</span>
+        </NavLink>
+    </div>
+    
+    <div class="nav-section">
+        <div class="nav-section-title">Management</div>
+        <NavLink class="nav-item" href="slots">
+            <div class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" fill="currentColor"/>
+                </svg>
+            </div>
+            <span class="nav-text">Manage Slots</span>
+        </NavLink>
+        
+        <NavLink class="nav-item" href="entry">
+            <div class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
+                </svg>
+            </div>
+            <span class="nav-text">Vehicle Entry</span>
+        </NavLink>
+        
+        <NavLink class="nav-item" href="active">
+            <div class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.22.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" fill="currentColor"/>
+                </svg>
+            </div>
+            <span class="nav-text">Active Parking</span>
+        </NavLink>
+    </div>
+    
+    <div class="nav-section">
+        <div class="nav-section-title">Reports</div>
+        <NavLink class="nav-item" href="records">
+            <div class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 3v18h18V3H3zm16 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z" fill="currentColor"/>
+                </svg>
+            </div>
+            <span class="nav-text">Parking Records</span>
+        </NavLink>
+        
+        <NavLink class="nav-item" href="reports">
+            <div class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
+                </svg>
+            </div>
+            <span class="nav-text">Reports</span>
+        </NavLink>
+    </div>
+</nav>

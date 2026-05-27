@@ -1,0 +1,127 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+
+<MudThemeProvider Theme="customTheme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout Class="smart-shell">
+    <MudAppBar Elevation="0" Class="smart-appbar">
+        <MudIconButton Icon="@(drawerOpen ? Icons.Material.Filled.MenuOpen : Icons.Material.Filled.Menu)"
+                       Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" Class="shell-icon-button"
+                       aria-label="Toggle navigation" />
+        <div class="appbar-brand">
+            <div>
+                <MudText Typo="Typo.h6" Class="brand-name">SmartPark</MudText>
+                <MudText Typo="Typo.caption" Class="brand-caption">Intelligent parking control</MudText>
+            </div>
+        </div>
+        <MudSpacer />
+        <div class="appbar-meta">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" />
+            <span>@currentTime.ToString("MMM dd, yyyy - HH:mm:ss")</span>
+        </div>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="drawerOpen" Elevation="0" Variant="DrawerVariant.Mini" OpenMiniOnHover="false"
+               Class="smart-drawer">
+        <MudDrawerHeader Class="drawer-header">
+            <div class="drawer-brand">
+                <div class="drawer-logo">P</div>
+                <div>
+                    <MudText Typo="Typo.h6" Class="drawer-title">SmartPark</MudText>
+                    <MudText Typo="Typo.caption" Class="drawer-subtitle">Parking Management</MudText>
+                </div>
+            </div>
+        </MudDrawerHeader>
+
+        <MudNavMenu Class="drawer-nav">
+            <MudText Typo="Typo.caption" Class="nav-kicker">Overview</MudText>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard"
+                        IconColor="Color.Inherit">Dashboard</MudNavLink>
+
+            <MudText Typo="Typo.caption" Class="nav-kicker">Operations</MudText>
+            <MudNavLink Href="/entry" Icon="@Icons.Material.Filled.AddRoad" IconColor="Color.Inherit">Vehicle Entry
+            </MudNavLink>
+            <MudNavLink Href="/active" Icon="@Icons.Material.Filled.DirectionsCar" IconColor="Color.Inherit">Active
+                Parking</MudNavLink>
+                <MudNavLink Href="/slots" Icon="@Icons.Material.Filled.LocalParking" IconColor="Color.Inherit">Manage Slots
+                </MudNavLink>
+
+                <MudText Typo="Typo.caption" Class="nav-kicker">Insights</MudText>
+                <MudNavLink Href="/records" Icon="@Icons.Material.Filled.TableRows" IconColor="Color.Inherit">Parking
+                    Records</MudNavLink>
+                    <MudNavLink Href="/reports" Icon="@Icons.Material.Filled.Assessment" IconColor="Color.Inherit">Reports
+                    </MudNavLink>
+                </MudNavMenu>
+            </MudDrawer>
+
+            <MudMainContent Class="smart-main">
+                <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="smart-container">
+                    <ErrorBoundary>
+                        <ChildContent>
+                            @Body
+                        </ChildContent>
+                        <ErrorContent Context="error">
+                            <div class="alert alert-danger m-4">
+                                SmartPark failed to load.
+                                <div class="small mt-2">@error.Message</div>
+                            </div>
+                        </ErrorContent>
+                    </ErrorBoundary>
+                </MudContainer>
+            </MudMainContent>
+        </MudLayout>
+
+@code {
+    private bool drawerOpen = true;
+    private DateTime currentTime = DateTime.Now;
+    private System.Threading.Timer? clockTimer;
+
+    private readonly MudTheme customTheme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#155EEF",
+            Secondary = "#12B76A",
+            Success = "#12B76A",
+            Warning = "#F79009",
+            Error = "#F04438",
+            Info = "#06AED4",
+            Background = "#F4F7FB",
+            Surface = "#FFFFFF",
+            AppbarBackground = "#0F172A",
+            AppbarText = "#FFFFFF",
+            DrawerBackground = "#0B1220",
+            DrawerText = "#D6E2F0"
+        },
+        LayoutProperties = new LayoutProperties()
+        {
+            DrawerWidthLeft = "292px",
+            DrawerWidthRight = "320px"
+        }
+    };
+
+    private void ToggleDrawer()
+    {
+        drawerOpen = !drawerOpen;
+    }
+
+    protected override void OnInitialized()
+    {
+        clockTimer = new System.Threading.Timer(_ =>
+        {
+            _ = InvokeAsync(() =>
+            {
+                currentTime = DateTime.Now;
+                StateHasChanged();
+            });
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    public void Dispose()
+    {
+        clockTimer?.Dispose();
+    }
+}

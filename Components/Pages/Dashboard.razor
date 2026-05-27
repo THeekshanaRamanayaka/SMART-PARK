@@ -1,0 +1,239 @@
+@page "/"
+@using SmartPark.Services
+@using SmartPark.Models
+@using SmartPark.Data
+@inject ParkingSlotService SlotService
+@inject ParkingRecordService RecordService
+@inject SmartParkDbContext DbContext
+
+<PageTitle>Dashboard - SmartPark</PageTitle>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">
+            <MudIcon Icon="@Icons.Material.Filled.Radar" Size="Size.Small" />
+            Live overview
+        </div>
+        <h1 class="page-title">Parking command center</h1>
+        <p class="page-subtitle">Monitor slot availability, active vehicles, and completed sessions from a single focused dashboard.</p>
+    </div>
+    <div class="page-actions">
+        <span class="status-pill"><span class="status-dot"></span>@availableSlots open slots</span>
+        <a href="/entry" class="btn btn-primary">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" />
+            New Entry
+        </a>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading">
+        <div>
+            <div class="spinner"></div>
+            <span>Loading dashboard data...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="grid-4 mb-4">
+        <div class="stats-card primary">
+            <div class="stats-top">
+                <div class="stats-label">Total Slots</div>
+                <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.LocalParking" /></div>
+            </div>
+            <div class="stats-number">@totalSlots</div>
+            <div class="stats-trend">Configured across the facility</div>
+        </div>
+
+        <div class="stats-card success">
+            <div class="stats-top">
+                <div class="stats-label">Available</div>
+                <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></div>
+            </div>
+            <div class="stats-number">@availableSlots</div>
+            <div class="stats-trend">@AvailabilityRate.ToString("0.#")% ready for arrivals</div>
+        </div>
+
+        <div class="stats-card danger">
+            <div class="stats-top">
+                <div class="stats-label">Occupied</div>
+                <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.DirectionsCar" /></div>
+            </div>
+            <div class="stats-number">@occupiedSlots</div>
+            <div class="stats-trend">@OccupancyRate.ToString("0.#")% current occupancy</div>
+        </div>
+
+        <div class="stats-card info">
+            <div class="stats-top">
+                <div class="stats-label">Active Sessions</div>
+                <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.Timer" /></div>
+            </div>
+            <div class="stats-number">@activeRecords.Count</div>
+            <div class="stats-trend">Vehicles currently parked</div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-body">
+                <div class="panel-heading">
+                    <div>
+                        <h2 class="section-title">Active parking</h2>
+                        <div class="muted-text">Latest vehicles inside the lot</div>
+                    </div>
+                    <span class="badge bg-primary">@activeRecords.Count sessions</span>
+                </div>
+
+                @if (activeRecords.Count == 0)
+                {
+                    <div class="empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Color="Color.Primary" Size="Size.Large" />
+                        <strong>No active sessions</strong>
+                        <p>The lot is quiet right now.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="list-group list-group-flush">
+                        @foreach (var record in activeRecords.Take(5))
+                        {
+                            <div class="list-group-item">
+                                <div>
+                                    <div class="vehicle-plate">@record.VehicleNumber</div>
+                                    <div class="owner-text mt-1">@record.OwnerName</div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-primary">Slot @record.ParkingSlot?.SlotNumber</span>
+                                    <div class="muted-text mt-1">@record.EntryTime.ToString("HH:mm") entry</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (activeRecords.Count > 5)
+                    {
+                        <div class="text-center mt-3">
+                            <a href="/active" class="btn btn-outline-primary btn-sm">
+                                <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
+                                View All (@activeRecords.Count)
+                            </a>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="panel-heading">
+                    <div>
+                        <h2 class="section-title">Recent completions</h2>
+                        <div class="muted-text">Vehicles that exited most recently</div>
+                    </div>
+                    <span class="badge bg-success">@completedRecords.Count total</span>
+                </div>
+
+                @if (completedRecords.Count == 0)
+                {
+                    <div class="empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.TaskAlt" Color="Color.Success" Size="Size.Large" />
+                        <strong>No completed sessions yet</strong>
+                        <p>Completed exits will appear here.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="list-group list-group-flush">
+                        @foreach (var record in completedRecords.Take(5))
+                        {
+                            <div class="list-group-item">
+                                <div>
+                                    <div class="vehicle-plate">@record.VehicleNumber</div>
+                                    <div class="owner-text mt-1">@record.OwnerName</div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-secondary">Slot @record.ParkingSlot?.SlotNumber</span>
+                                    <div class="muted-text mt-1">@record.ExitTime?.ToString("HH:mm") exit</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (completedRecords.Count > 5)
+                    {
+                        <div class="text-center mt-3">
+                            <a href="/records" class="btn btn-outline-primary btn-sm">
+                                <MudIcon Icon="@Icons.Material.Filled.TableRows" Size="Size.Small" />
+                                View All Records
+                            </a>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-body">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="section-title">Quick actions</h2>
+                    <div class="muted-text">Move through the daily parking workflow fast.</div>
+                </div>
+            </div>
+            <div class="quick-actions">
+                <a href="/entry" class="btn btn-primary">
+                    <MudIcon Icon="@Icons.Material.Filled.AddRoad" Size="Size.Small" />
+                    Register Vehicle
+                </a>
+                <a href="/active" class="btn btn-outline-primary">
+                    <MudIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" />
+                    Record Exit
+                </a>
+                <a href="/slots" class="btn btn-outline-primary">
+                    <MudIcon Icon="@Icons.Material.Filled.LocalParking" Size="Size.Small" />
+                    Manage Slots
+                </a>
+                <a href="/reports" class="btn btn-outline-primary">
+                    <MudIcon Icon="@Icons.Material.Filled.Assessment" Size="Size.Small" />
+                    View Reports
+                </a>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private int totalSlots;
+    private int availableSlots;
+    private int occupiedSlots;
+    private List<ParkingRecord> activeRecords = new();
+    private List<ParkingRecord> completedRecords = new();
+    private bool isLoading = true;
+
+    private double AvailabilityRate => totalSlots > 0 ? (double)availableSlots / totalSlots * 100 : 0;
+    private double OccupancyRate => totalSlots > 0 ? (double)occupiedSlots / totalSlots * 100 : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await DbContext.Database.EnsureCreatedAsync();
+            totalSlots = (await SlotService.GetAllSlotsAsync()).Count;
+            availableSlots = await SlotService.GetAvailableSlotsCountAsync();
+            occupiedSlots = await SlotService.GetOccupiedSlotsCountAsync();
+            activeRecords = await RecordService.GetActiveRecordsAsync();
+            completedRecords = await RecordService.GetCompletedRecordsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

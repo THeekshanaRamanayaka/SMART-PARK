@@ -1,0 +1,147 @@
+@page "/records"
+@using SmartPark.Services
+@using SmartPark.Models
+@inject ParkingRecordService RecordService
+
+<PageTitle>Parking Records - SmartPark</PageTitle>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">
+            <MudIcon Icon="@Icons.Material.Filled.TableRows" Size="Size.Small" />
+            History
+        </div>
+        <h1 class="page-title">Parking records</h1>
+        <p class="page-subtitle">Search vehicle history, review slots, and compare active versus completed sessions.</p>
+    </div>
+    <div class="page-actions">
+        <span class="status-pill"><span class="status-dot"></span>@records.Count records shown</span>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body toolbar-card">
+        <div class="panel-heading">
+            <div>
+                <h2 class="section-title">Search records</h2>
+                <div class="muted-text">Find by vehicle number or slot number.</div>
+            </div>
+        </div>
+        <div class="input-group">
+            <input type="text" class="form-control" @bind="searchTerm" placeholder="Search by vehicle number or slot number" />
+            <button class="btn btn-primary" @onclick="Search">
+                <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
+                Search
+            </button>
+            <button class="btn btn-secondary" @onclick="ClearSearch">
+                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+                Clear
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="panel-heading">
+            <div>
+                <h2 class="section-title">Record list</h2>
+                <div class="muted-text">Newest entries appear first.</div>
+            </div>
+        </div>
+
+        @if (records.Count == 0)
+        {
+            <div class="empty-state">
+                <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" Size="Size.Large" />
+                <strong>No parking records found</strong>
+                <p>Try a different vehicle number or slot.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-shell">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Vehicle Number</th>
+                                <th>Owner Name</th>
+                                <th>Slot</th>
+                                <th>Entry Time</th>
+                                <th>Exit Time</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in records)
+                            {
+                                <tr>
+                                    <td><span class="vehicle-plate">@record.VehicleNumber</span></td>
+                                    <td>@record.OwnerName</td>
+                                    <td><span class="badge bg-primary">Slot @record.ParkingSlot?.SlotNumber</span></td>
+                                    <td>@record.EntryTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>@(record.ExitTime?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                                    <td>@FormatDuration(record.Duration)</td>
+                                    <td>
+                                        <span class="badge @(record.IsCompleted ? "bg-success" : "bg-warning")">
+                                            @(record.IsCompleted ? "Completed" : "Active")
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ParkingRecord> records = new();
+    private string searchTerm = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadRecords();
+        }
+        catch (Exception ex)
+        {
+            records = new();
+            searchTerm = string.Empty;
+            Console.WriteLine($"Failed to load records: {ex.Message}");
+        }
+    }
+
+    private async Task LoadRecords()
+    {
+        records = await RecordService.GetAllRecordsAsync();
+    }
+
+    private async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            await LoadRecords();
+        }
+        else
+        {
+            records = await RecordService.SearchRecordsAsync(searchTerm);
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        await LoadRecords();
+    }
+
+    private static string FormatDuration(TimeSpan? duration)
+    {
+        return duration == null ? "-" : $"{duration.Value.Hours}h {duration.Value.Minutes}m";
+    }
+}

@@ -1,0 +1,207 @@
+@page "/entry"
+@using SmartPark.Services
+@using SmartPark.Models
+@inject ParkingSlotService SlotService
+@inject ParkingRecordService RecordService
+
+<PageTitle>Vehicle Entry - SmartPark</PageTitle>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">
+            <MudIcon Icon="@Icons.Material.Filled.AddRoad" Size="Size.Small" />
+            Gate operation
+        </div>
+        <h1 class="page-title">Register vehicle entry</h1>
+        <p class="page-subtitle">Capture the vehicle, review previous visits, and assign the next available parking slot.</p>
+    </div>
+    <div class="page-actions">
+        <span class="status-pill"><span class="status-dot"></span>@availableSlots slots available</span>
+    </div>
+</div>
+
+<div class="split-grid">
+    <div class="card">
+        <div class="card-body">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="section-title">Entry details</h2>
+                    <div class="muted-text">Vehicle and owner information</div>
+                </div>
+                <span class="badge bg-primary">Gate In</span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Vehicle Number</label>
+                <input type="text" class="form-control" @bind="vehicleNumber" placeholder="e.g., ABC-1234" />
+            </div>
+
+            <div class="mb-3">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="LoadVehicleHistory" disabled="@string.IsNullOrWhiteSpace(vehicleNumber)">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" />
+                    View Past Details
+                </button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(historyMessage))
+            {
+                <div class="alert alert-info">@historyMessage</div>
+            }
+
+            @if (vehicleHistory.Count > 0)
+            {
+                <div class="table-shell mb-3">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Entry Time</th>
+                                    <th>Exit Time</th>
+                                    <th>Slot</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var record in vehicleHistory)
+                                {
+                                    <tr>
+                                        <td>@record.EntryTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>@(record.ExitTime?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                                        <td><span class="badge bg-primary">@record.ParkingSlot?.SlotNumber</span></td>
+                                        <td>@FormatDuration(record.Duration)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label">Owner Name</label>
+                <input type="text" class="form-control" @bind="ownerName" placeholder="Enter owner name" />
+            </div>
+
+            <button class="btn btn-primary" @onclick="RegisterEntry" disabled="@(availableSlots == 0)">
+                <MudIcon Icon="@Icons.Material.Filled.HowToReg" Size="Size.Small" />
+                Register Entry
+            </button>
+
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="alert @(isSuccess ? "alert-success" : "alert-danger") mt-3">@message</div>
+            }
+        </div>
+    </div>
+
+    <div class="content-grid">
+        <div class="stats-card success">
+            <div class="stats-top">
+                <div class="stats-label">Available Slots</div>
+                <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.EventAvailable" /></div>
+            </div>
+            <div class="stats-number">@availableSlots</div>
+            <div class="stats-trend">Ready for the next arrival</div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="panel-heading">
+                    <div>
+                        <h2 class="section-title">Entry checklist</h2>
+                        <div class="muted-text">Keep the gate flow consistent</div>
+                    </div>
+                </div>
+                <div class="list-group">
+                    <div class="list-group-item">
+                        <span>Confirm vehicle number</span>
+                        <span class="badge bg-primary">Plate</span>
+                    </div>
+                    <div class="list-group-item">
+                        <span>Verify owner name</span>
+                        <span class="badge bg-secondary">Owner</span>
+                    </div>
+                    <div class="list-group-item">
+                        <span>Assign open slot</span>
+                        <span class="badge bg-success">Auto</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string vehicleNumber = string.Empty;
+    private string ownerName = string.Empty;
+    private int availableSlots = 0;
+    private string message = string.Empty;
+    private bool isSuccess = false;
+    private List<ParkingRecord> vehicleHistory = new();
+    private string historyMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadAvailableSlots();
+        }
+        catch (Exception ex)
+        {
+            message = $"Failed to load available slots: {ex.Message}";
+            availableSlots = 0;
+        }
+    }
+
+    private async Task LoadAvailableSlots()
+    {
+        availableSlots = await SlotService.GetAvailableSlotsCountAsync();
+    }
+
+    private async Task RegisterEntry()
+    {
+        if (string.IsNullOrWhiteSpace(vehicleNumber) || string.IsNullOrWhiteSpace(ownerName))
+        {
+            message = "Please fill in all fields";
+            isSuccess = false;
+            return;
+        }
+
+        var success = await RecordService.RecordVehicleEntryAsync(vehicleNumber, ownerName);
+
+        if (success)
+        {
+            message = $"Vehicle {vehicleNumber} registered successfully!";
+            isSuccess = true;
+            vehicleNumber = string.Empty;
+            ownerName = string.Empty;
+            await LoadAvailableSlots();
+        }
+        else
+        {
+            message = "Failed to register vehicle. No available slots.";
+            isSuccess = false;
+        }
+    }
+
+    private async Task LoadVehicleHistory()
+    {
+        var searchNumber = vehicleNumber.Trim();
+        if (string.IsNullOrWhiteSpace(searchNumber))
+        {
+            historyMessage = "Enter a vehicle number to load past details.";
+            vehicleHistory = new();
+            return;
+        }
+
+        vehicleHistory = await RecordService.GetVehicleHistoryAsync(searchNumber);
+        historyMessage = vehicleHistory.Count == 0
+            ? $"No past completed records found for {searchNumber}."
+            : $"Showing {vehicleHistory.Count} past record(s) for {searchNumber}.";
+    }
+
+    private static string FormatDuration(TimeSpan? duration)
+    {
+        return duration == null ? "-" : $"{duration.Value.Hours}h {duration.Value.Minutes}m";
+    }
+}

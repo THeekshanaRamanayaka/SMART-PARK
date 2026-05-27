@@ -1,0 +1,16 @@
+# Build artifacts
+**/bin/
+**/obj/
+
+# User-specific files
+.vs/
+.vscode/
+.env
+*.user
+*.suo
+
+# Logs
+*.log
+
+# OS files
+.DS_Store

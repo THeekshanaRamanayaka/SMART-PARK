@@ -1,0 +1,260 @@
+@page "/slots"
+@using SmartPark.Services
+@using SmartPark.Models
+@inject ParkingSlotService SlotService
+
+<PageTitle>Manage Parking Slots - SmartPark</PageTitle>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">
+            <MudIcon Icon="@Icons.Material.Filled.LocalParking" Size="Size.Small" />
+            Slot inventory
+        </div>
+        <h1 class="page-title">Manage parking slots</h1>
+        <p class="page-subtitle">Create, edit, and monitor every slot in the facility with clear occupancy signals.</p>
+    </div>
+    <div class="page-actions">
+        <span class="status-pill"><span class="status-dot"></span>@AvailableSlots available</span>
+        <span class="status-pill"><span class="status-dot warning"></span>@OccupiedSlots occupied</span>
+    </div>
+</div>
+
+<div class="grid-3 mb-4">
+    <div class="stats-card primary">
+        <div class="stats-top">
+            <div class="stats-label">Total Slots</div>
+            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.Apps" /></div>
+        </div>
+        <div class="stats-number">@slots.Count</div>
+        <div class="stats-trend">Configured spaces</div>
+    </div>
+    <div class="stats-card success">
+        <div class="stats-top">
+            <div class="stats-label">Available</div>
+            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></div>
+        </div>
+        <div class="stats-number">@AvailableSlots</div>
+        <div class="stats-trend">Ready for allocation</div>
+    </div>
+    <div class="stats-card danger">
+        <div class="stats-top">
+            <div class="stats-label">Occupied</div>
+            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.DirectionsCar" /></div>
+        </div>
+        <div class="stats-number">@OccupiedSlots</div>
+        <div class="stats-trend">Currently in use</div>
+    </div>
+</div>
+
+<div class="split-grid mb-4">
+    <div class="card">
+        <div class="card-body">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="section-title">@(editingSlot == null ? "Add new slot" : "Edit slot")</h2>
+                    <div class="muted-text">Use clear labels like A-01 or B-12.</div>
+                </div>
+                <span class="badge bg-primary">Slot</span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Slot Number</label>
+                <input type="text" class="form-control" @bind="slotNumber" placeholder="e.g., A-01" />
+            </div>
+
+            <div class="toolbar-actions">
+                <button class="btn btn-primary" @onclick="SaveSlot">
+                    <MudIcon Icon="@(editingSlot == null ? Icons.Material.Filled.Add : Icons.Material.Filled.Save)" Size="Size.Small" />
+                    @(editingSlot == null ? "Add Slot" : "Update Slot")
+                </button>
+                @if (editingSlot != null)
+                {
+                    <button class="btn btn-secondary" @onclick="CancelEdit">
+                        <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+                        Cancel
+                    </button>
+                }
+            </div>
+
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="alert alert-info mt-3">@message</div>
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="section-title">Visual slot map</h2>
+                    <div class="muted-text">A fast scan of availability by space.</div>
+                </div>
+            </div>
+
+            @if (slots.Count == 0)
+            {
+                <div class="empty-state">
+                    <MudIcon Icon="@Icons.Material.Filled.LocalParking" Color="Color.Primary" Size="Size.Large" />
+                    <strong>No slots yet</strong>
+                    <p>Add your first slot to start managing the lot.</p>
+                </div>
+            }
+            else
+            {
+                <div class="parking-layout">
+                    @foreach (var slot in slots)
+                    {
+                        <div class="slot-tile @(slot.IsOccupied ? "occupied" : "available")">
+                            <span class="slot-number">@slot.SlotNumber</span>
+                            <span class="slot-meta">@(slot.IsOccupied ? "Occupied" : "Available")</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="panel-heading">
+            <div>
+                <h2 class="section-title">Existing slots</h2>
+                <div class="muted-text">Occupied slots are locked from edits and deletion.</div>
+            </div>
+        </div>
+
+        @if (slots.Count == 0)
+        {
+            <div class="empty-state">
+                <MudIcon Icon="@Icons.Material.Filled.AddLocationAlt" Color="Color.Primary" Size="Size.Large" />
+                <strong>No slots configured</strong>
+                <p>Create a slot above to populate this list.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-shell">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Slot Number</th>
+                                <th>Status</th>
+                                <th>Last Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var slot in slots)
+                            {
+                                <tr>
+                                    <td><span class="vehicle-plate">@slot.SlotNumber</span></td>
+                                    <td>
+                                        <span class="badge @(slot.IsOccupied ? "bg-danger" : "bg-success")">
+                                            @(slot.IsOccupied ? "Occupied" : "Available")
+                                        </span>
+                                    </td>
+                                    <td>@(slot.LastUpdated?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                                    <td>
+                                        <div class="toolbar-actions">
+                                            <button class="btn btn-sm btn-warning" @onclick="() => EditSlot(slot)" disabled="@slot.IsOccupied">
+                                                <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                                Edit
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteSlot(slot.Id)" disabled="@slot.IsOccupied">
+                                                <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" />
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ParkingSlot> slots = new();
+    private ParkingSlot? editingSlot;
+    private string slotNumber = string.Empty;
+    private string message = string.Empty;
+
+    private int AvailableSlots => slots.Count(slot => !slot.IsOccupied);
+    private int OccupiedSlots => slots.Count(slot => slot.IsOccupied);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadSlots();
+        }
+        catch (Exception ex)
+        {
+            message = $"Failed to load slots: {ex.Message}";
+            slots = new();
+        }
+    }
+
+    private async Task LoadSlots()
+    {
+        slots = await SlotService.GetAllSlotsAsync();
+    }
+
+    private async Task SaveSlot()
+    {
+        if (string.IsNullOrWhiteSpace(slotNumber))
+        {
+            message = "Please enter a slot number";
+            return;
+        }
+
+        bool success;
+        if (editingSlot == null)
+        {
+            var newSlot = new ParkingSlot { SlotNumber = slotNumber, IsOccupied = false };
+            success = await SlotService.AddSlotAsync(newSlot);
+            message = success ? "Slot added successfully" : "Failed to add slot";
+        }
+        else
+        {
+            editingSlot.SlotNumber = slotNumber;
+            success = await SlotService.UpdateSlotAsync(editingSlot);
+            message = success ? "Slot updated successfully" : "Failed to update slot";
+        }
+
+        if (success)
+        {
+            slotNumber = string.Empty;
+            editingSlot = null;
+            await LoadSlots();
+        }
+    }
+
+    private void EditSlot(ParkingSlot slot)
+    {
+        editingSlot = slot;
+        slotNumber = slot.SlotNumber;
+        message = string.Empty;
+    }
+
+    private void CancelEdit()
+    {
+        editingSlot = null;
+        slotNumber = string.Empty;
+        message = string.Empty;
+    }
+
+    private async Task DeleteSlot(int id)
+    {
+        var success = await SlotService.DeleteSlotAsync(id);
+        message = success ? "Slot deleted successfully" : "Failed to delete slot";
+        if (success) await LoadSlots();
+    }
+}

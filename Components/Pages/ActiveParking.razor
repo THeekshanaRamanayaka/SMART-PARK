@@ -1,0 +1,128 @@
+@page "/active"
+@using SmartPark.Services
+@using SmartPark.Models
+@inject ParkingRecordService RecordService
+
+<PageTitle>Active Parking - SmartPark</PageTitle>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">
+            <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Size="Size.Small" />
+            Live sessions
+        </div>
+        <h1 class="page-title">Active parking</h1>
+        <p class="page-subtitle">See every vehicle currently inside the lot and record exits as they leave.</p>
+    </div>
+    <div class="page-actions">
+        <span class="status-pill"><span class="status-dot warning"></span>@activeRecords.Count vehicles inside</span>
+        <a href="/entry" class="btn btn-primary">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" />
+            New Entry
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="panel-heading">
+            <div>
+                <h2 class="section-title">Current vehicles</h2>
+                <div class="muted-text">Durations update when the page refreshes or an exit is recorded.</div>
+            </div>
+        </div>
+
+        @if (activeRecords.Count == 0)
+        {
+            <div class="empty-state">
+                <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Color="Color.Primary" Size="Size.Large" />
+                <strong>No active parking records</strong>
+                <p>New vehicle entries will appear here.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-shell">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Vehicle Number</th>
+                                <th>Owner Name</th>
+                                <th>Slot Number</th>
+                                <th>Entry Time</th>
+                                <th>Duration</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in activeRecords)
+                            {
+                                <tr>
+                                    <td><span class="vehicle-plate">@record.VehicleNumber</span></td>
+                                    <td>@record.OwnerName</td>
+                                    <td><span class="badge bg-primary">Slot @record.ParkingSlot?.SlotNumber</span></td>
+                                    <td>@record.EntryTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>@GetDuration(record.EntryTime)</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-success" @onclick="() => RecordExit(record.Id)">
+                                            <MudIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" />
+                                            Record Exit
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="alert alert-success mt-3">@message</div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ParkingRecord> activeRecords = new();
+    private string message = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadActiveRecords();
+        }
+        catch (Exception ex)
+        {
+            message = $"Failed to load active parking records: {ex.Message}";
+            activeRecords = new();
+        }
+    }
+
+    private async Task LoadActiveRecords()
+    {
+        activeRecords = await RecordService.GetActiveRecordsAsync();
+    }
+
+    private static string GetDuration(DateTime entryTime)
+    {
+        var duration = DateTime.Now - entryTime;
+        return duration.TotalHours >= 24
+            ? $"{(int)duration.TotalDays}d {duration.Hours}h {duration.Minutes}m"
+            : $"{duration.Hours}h {duration.Minutes}m";
+    }
+
+    private async Task RecordExit(int recordId)
+    {
+        var success = await RecordService.RecordVehicleExitAsync(recordId);
+        if (success)
+        {
+            message = "Vehicle exit recorded successfully";
+            await LoadActiveRecords();
+            StateHasChanged();
+        }
+    }
+}
