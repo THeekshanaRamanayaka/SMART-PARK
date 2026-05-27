@@ -367,6 +367,35 @@ curl http://127.0.0.1:5099/api/slots/occupied-count
 
 Startup, database, slot, and parking-record operations are logged at runtime. When you run the app with `dotnet run -f net10.0-maccatalyst`, watch the terminal output for `Information`, `Warning`, and `Error` events.
 
+## Viewing Logs
+
+- **Terminal (when running the app):** The simplest place to see runtime logs is the terminal where you started the app with `dotnet run` — the app writes `Information`/`Warning`/`Error` lines to stdout.
+
+```bash
+dotnet run --project ./SmartPark/SmartPark.csproj -f net10.0-maccatalyst
+# watch output in the same terminal
+```
+
+- **Mac system logs (MacCatalyst app):** Use Console.app and filter by process name `SmartPark`, or use the `log` command in Terminal to stream system logs for the app:
+
+```bash
+# live stream logs for the SmartPark process
+log stream --style syslog --predicate 'process == "SmartPark"'
+
+# show recent logs (last hour)
+log show --style syslog --predicate 'process == "SmartPark"' --last 1h
+```
+
+- **Local API and health checks:** If you only need to check the API, query the health endpoint or API endpoints; logs related to requests and API startup appear in the terminal running the app:
+
+```bash
+curl http://127.0.0.1:5099/health
+```
+
+- **VS Code:** If you run the app from VS Code's debugger/launch, open the `Terminal` or `Debug Console` panel to see the same output.
+
+- **Persistent logging (optional):** If you want logs written to a file, add a file logger provider in `MauiProgram.cs` or your logging configuration (e.g., `Microsoft.Extensions.Logging` with a rolling-file provider). I can add a simple file-logging setup if you'd like.
+
 ## 🐛 Troubleshooting
 
 ### Build Fails
