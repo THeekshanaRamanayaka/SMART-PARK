@@ -128,6 +128,11 @@ Or restore just the app project:
 dotnet restore ./SmartPark/SmartPark.csproj
 ```
 
+### Finalization Notes
+
+- **Solution path fixed:** The solution `Smart-Park.sln` previously referenced `SmartPark\SmartPark.csproj`; I've corrected it to reference `SmartPark.csproj` so `dotnet restore "Smart-Park.sln"` works from this folder.
+- **Verified:** I ran `dotnet restore`, `dotnet build -f net10.0-maccatalyst`, and `dotnet run --project ./SmartPark.csproj -f net10.0-maccatalyst` successfully on macOS (MacCatalyst). If you want, I can commit and push these changes to the repository.
+
 ### 3. Build the Project
 
 From repo root (solution):
