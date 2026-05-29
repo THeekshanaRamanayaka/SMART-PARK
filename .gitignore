@@ -16,4 +16,9 @@
 .DS_Store
 
 # Ignore generated docs index
-docs/DOCS_INDEX.md
+docs/
+
+Tools/generate_pdfs.py
+Tools/generate_pptx.py
+
+Assignment 3 - ITE 1942 (1).pdf
