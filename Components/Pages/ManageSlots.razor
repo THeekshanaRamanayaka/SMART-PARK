@@ -24,7 +24,9 @@
     <div class="stats-card primary">
         <div class="stats-top">
             <div class="stats-label">Total Slots</div>
-            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.Apps" /></div>
+            <div class="stats-icon">
+                <MudIcon Icon="@Icons.Material.Filled.Apps" />
+            </div>
         </div>
         <div class="stats-number">@slots.Count</div>
         <div class="stats-trend">Configured spaces</div>
@@ -32,7 +34,9 @@
     <div class="stats-card success">
         <div class="stats-top">
             <div class="stats-label">Available</div>
-            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></div>
+            <div class="stats-icon">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+            </div>
         </div>
         <div class="stats-number">@AvailableSlots</div>
         <div class="stats-trend">Ready for allocation</div>
@@ -40,7 +44,9 @@
     <div class="stats-card danger">
         <div class="stats-top">
             <div class="stats-label">Occupied</div>
-            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.DirectionsCar" /></div>
+            <div class="stats-icon">
+                <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" />
+            </div>
         </div>
         <div class="stats-number">@OccupiedSlots</div>
         <div class="stats-trend">Currently in use</div>
@@ -65,7 +71,8 @@
 
             <div class="toolbar-actions">
                 <button class="btn btn-primary" @onclick="SaveSlot">
-                    <MudIcon Icon="@(editingSlot == null ? Icons.Material.Filled.Add : Icons.Material.Filled.Save)" Size="Size.Small" />
+                    <MudIcon Icon="@(editingSlot == null ? Icons.Material.Filled.Add : Icons.Material.Filled.Save)"
+                             Size="Size.Small" />
                     @(editingSlot == null ? "Add Slot" : "Update Slot")
                 </button>
                 @if (editingSlot != null)
@@ -160,11 +167,13 @@
                                     <td>@(slot.LastUpdated?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
                                     <td>
                                         <div class="toolbar-actions">
-                                            <button class="btn btn-sm btn-warning" @onclick="() => EditSlot(slot)" disabled="@slot.IsOccupied">
+                                            <button class="btn btn-sm btn-warning" @onclick="() => EditSlot(slot)"
+                                                    disabled="@slot.IsOccupied">
                                                 <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
                                                 Edit
                                             </button>
-                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteSlot(slot.Id)" disabled="@slot.IsOccupied">
+                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteSlot(slot.Id)"
+                                                    disabled="@slot.IsOccupied">
                                                 <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" />
                                                 Delete
                                             </button>

@@ -1,7 +1,12 @@
 @page "/reports"
+@using System.Globalization
+@using System.IO
+@using System.Text
+@using Microsoft.Extensions.Logging
 @using SmartPark.Services
 @using SmartPark.Models
 @inject ParkingRecordService RecordService
+@inject ILogger<Reports> Logger
 
 <PageTitle>Parking Reports - SmartPark</PageTitle>
 
@@ -15,18 +20,30 @@
         <p class="page-subtitle">Review completed sessions with clean operational metrics and export-ready detail.</p>
     </div>
     <div class="page-actions">
-        <button class="btn btn-success" @onclick="ExportReport" disabled="@(completedRecords.Count == 0)">
+        <button class="btn btn-success" @onclick="ExportReport"
+                disabled="@(completedRecords.Count == 0 || isExporting)">
             <MudIcon Icon="@Icons.Material.Filled.IosShare" Size="Size.Small" />
-            Export Report
+            @(isExporting ? "Exporting..." : "Export CSV")
         </button>
     </div>
 </div>
+
+@if (!string.IsNullOrEmpty(exportMessage))
+{
+    <div class="alert @(exportSucceeded ? "alert-success" : "alert-danger") mb-3" role="alert">
+        <MudIcon Icon="@(exportSucceeded ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
+                 Size="Size.Small" />
+        <span class="ms-2">@exportMessage</span>
+    </div>
+}
 
 <div class="grid-3 mb-4">
     <div class="stats-card primary">
         <div class="stats-top">
             <div class="stats-label">Completed Sessions</div>
-            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.TaskAlt" /></div>
+            <div class="stats-icon">
+                <MudIcon Icon="@Icons.Material.Filled.TaskAlt" />
+            </div>
         </div>
         <div class="stats-number">@completedRecords.Count</div>
         <div class="stats-trend">Total recorded exits</div>
@@ -35,7 +52,9 @@
     <div class="stats-card success">
         <div class="stats-top">
             <div class="stats-label">Average Duration</div>
-            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.Timer" /></div>
+            <div class="stats-icon">
+                <MudIcon Icon="@Icons.Material.Filled.Timer" />
+            </div>
         </div>
         <div class="stats-number">@AverageDurationText</div>
         <div class="stats-trend">Across completed sessions</div>
@@ -44,7 +63,9 @@
     <div class="stats-card info">
         <div class="stats-top">
             <div class="stats-label">Total Duration</div>
-            <div class="stats-icon"><MudIcon Icon="@Icons.Material.Filled.QueryStats" /></div>
+            <div class="stats-icon">
+                <MudIcon Icon="@Icons.Material.Filled.QueryStats" />
+            </div>
         </div>
         <div class="stats-number">@TotalDurationText</div>
         <div class="stats-trend">Accumulated parking time</div>
@@ -109,6 +130,9 @@
 
 @code {
     private List<ParkingRecord> completedRecords = new();
+    private bool isExporting;
+    private bool exportSucceeded;
+    private string? exportMessage;
 
     private TimeSpan TotalDuration => completedRecords
         .Where(record => record.Duration.HasValue)
@@ -149,21 +173,104 @@
         completedRecords = await RecordService.GetCompletedRecordsAsync();
     }
 
-    private void ExportReport()
+    private async Task ExportReport()
     {
-        Console.WriteLine("=== PARKING REPORT ===");
-        Console.WriteLine($"Generated: {DateTime.Now}");
-        Console.WriteLine($"Total Completed Sessions: {completedRecords.Count}");
-        Console.WriteLine();
-
-        foreach (var record in completedRecords)
+        if (completedRecords.Count == 0 || isExporting)
         {
-            Console.WriteLine($"Vehicle: {record.VehicleNumber} | Owner: {record.OwnerName}");
-            Console.WriteLine($"Slot: {record.ParkingSlot?.SlotNumber}");
-            Console.WriteLine($"Entry: {record.EntryTime} | Exit: {record.ExitTime}");
-            Console.WriteLine($"Duration: {FormatDuration(record.Duration)}");
-            Console.WriteLine("---");
+            return;
         }
+
+        isExporting = true;
+        exportMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var csv = BuildCsv(completedRecords);
+            var fileName = $"SmartPark-Report-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+            var directory = ResolveExportDirectory();
+            Directory.CreateDirectory(directory);
+            var fullPath = Path.Combine(directory, fileName);
+
+            // UTF-8 with BOM so Excel on Windows opens it cleanly.
+            await File.WriteAllTextAsync(fullPath, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            Logger.LogInformation("Exported parking report ({Count} rows) to {Path}", completedRecords.Count, fullPath);
+
+            exportSucceeded = true;
+            exportMessage = $"Exported {completedRecords.Count} sessions to {fullPath}";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export parking report");
+            exportSucceeded = false;
+            exportMessage = $"Export failed: {ex.Message}";
+        }
+        finally
+        {
+            isExporting = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string BuildCsv(IReadOnlyList<ParkingRecord> records)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("#,VehicleNumber,OwnerName,SlotNumber,EntryTime,ExitTime,DurationHours,DurationText");
+
+        for (var i = 0; i < records.Count; i++)
+        {
+            var r = records[i];
+            var entry = r.EntryTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+            var exit = r.ExitTime?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty;
+            var durationHours = r.Duration.HasValue
+                ? r.Duration.Value.TotalHours.ToString("F2", CultureInfo.InvariantCulture)
+                : string.Empty;
+
+            sb.Append(i + 1).Append(',')
+              .Append(EscapeCsv(r.VehicleNumber)).Append(',')
+              .Append(EscapeCsv(r.OwnerName)).Append(',')
+              .Append(EscapeCsv(r.ParkingSlot?.SlotNumber ?? string.Empty)).Append(',')
+              .Append(EscapeCsv(entry)).Append(',')
+              .Append(EscapeCsv(exit)).Append(',')
+              .Append(durationHours).Append(',')
+              .Append(EscapeCsv(FormatDuration(r.Duration)))
+              .AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    private static string EscapeCsv(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var needsQuoting = value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0;
+        var escaped = value.Replace("\"", "\"\"");
+        return needsQuoting ? $"\"{escaped}\"" : escaped;
+    }
+
+    private static string ResolveExportDirectory()
+    {
+        // Use the MAUI per-app data directory; it is writable in MacCatalyst's sandboxed container.
+        try
+        {
+            var appData = Microsoft.Maui.Storage.FileSystem.Current.AppDataDirectory;
+            if (!string.IsNullOrWhiteSpace(appData))
+            {
+                return Path.Combine(appData, "Reports");
+            }
+        }
+        catch
+        {
+            // FileSystem may be unavailable in non-MAUI hosts (e.g. unit tests); fall through.
+        }
+
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        return Path.Combine(documents, "SmartPark", "Reports");
     }
 
     private static string FormatDuration(TimeSpan? duration)

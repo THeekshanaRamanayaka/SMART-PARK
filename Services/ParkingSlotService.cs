@@ -61,6 +61,23 @@ public class ParkingSlotService
         }
     }
 
+    public async Task<List<ParkingSlot>> GetAvailableSlotsAsync()
+    {
+        try
+        {
+            _logger.LogInformation("Loading all available parking slots");
+            return await _context.ParkingSlots
+                .Where(s => !s.IsOccupied)
+                .OrderBy(s => s.SlotNumber)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load available parking slots");
+            return new List<ParkingSlot>();
+        }
+    }
+
     public async Task<bool> AddSlotAsync(ParkingSlot slot)
     {
         try

@@ -166,24 +166,24 @@
     .nav-header {
         padding: 1.5rem 1rem 1rem;
     }
-    
+
     .brand-container {
         gap: 0.75rem;
     }
-    
+
     .brand-icon {
         width: 40px;
         height: 40px;
     }
-    
+
     .brand-title {
         font-size: 1.25rem;
     }
-    
+
     .nav-menu {
         padding: 0 0.75rem 1.5rem;
     }
-    
+
     .nav-item {
         padding: 1rem 0.75rem;
     }

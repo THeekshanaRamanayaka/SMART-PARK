@@ -249,7 +249,7 @@ a {
     box-shadow: var(--sp-shadow-soft);
 }
 
-.page-header > * {
+.page-header>* {
     position: relative;
     z-index: 1;
 }
@@ -759,11 +759,11 @@ a {
     border-color: rgba(16, 24, 40, 0.07);
 }
 
-.table-striped > tbody > tr:nth-of-type(odd) > * {
+.table-striped>tbody>tr:nth-of-type(odd)>* {
     background-color: rgba(21, 94, 239, 0.025);
 }
 
-.table-hover > tbody > tr:hover > * {
+.table-hover>tbody>tr:hover>* {
     background-color: rgba(18, 183, 106, 0.06);
 }
 

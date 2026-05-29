@@ -126,37 +126,88 @@ public class ParkingRecordService
         }
     }
 
-    public async Task<bool> RecordVehicleEntryAsync(string vehicleNumber, string ownerName)
+    public async Task<bool> RecordVehicleEntryAsync(string vehicleNumber, string ownerName, int? slotId = null)
     {
         try
         {
-            _logger.LogInformation("Recording vehicle entry for {VehicleNumber}", vehicleNumber);
-            var availableSlot = await _slotService.GetAvailableSlotAsync();
-            if (availableSlot == null)
+            _logger.LogInformation("Recording vehicle entry for {VehicleNumber} (slotId={SlotId})", vehicleNumber, slotId);
+
+            ParkingSlot? targetSlot;
+            if (slotId.HasValue)
             {
-                _logger.LogWarning("No available slot found for vehicle {VehicleNumber}", vehicleNumber);
-                return false;
+                targetSlot = await _context.ParkingSlots.FindAsync(slotId.Value);
+                if (targetSlot == null || targetSlot.IsOccupied)
+                {
+                    _logger.LogWarning("Requested slot {SlotId} is unavailable for vehicle {VehicleNumber}", slotId, vehicleNumber);
+                    return false;
+                }
+            }
+            else
+            {
+                targetSlot = await _slotService.GetAvailableSlotAsync();
+                if (targetSlot == null)
+                {
+                    _logger.LogWarning("No available slot found for vehicle {VehicleNumber}", vehicleNumber);
+                    return false;
+                }
             }
 
             var record = new ParkingRecord
             {
                 VehicleNumber = vehicleNumber,
                 OwnerName = ownerName,
-                ParkingSlotId = availableSlot.Id,
+                ParkingSlotId = targetSlot.Id,
                 EntryTime = DateTime.Now,
                 IsCompleted = false
             };
 
             _context.ParkingRecords.Add(record);
-            await _slotService.UpdateSlotStatusAsync(availableSlot.Id, true);
+            await _slotService.UpdateSlotStatusAsync(targetSlot.Id, true);
             await _context.SaveChangesAsync();
-            _logger.LogInformation("Vehicle {VehicleNumber} assigned to slot {SlotNumber}", vehicleNumber, availableSlot.SlotNumber);
+            _logger.LogInformation("Vehicle {VehicleNumber} assigned to slot {SlotNumber}", vehicleNumber, targetSlot.SlotNumber);
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to record vehicle entry for {VehicleNumber}", vehicleNumber);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Returns a distinct list of previously-seen vehicles together with the most recent owner name,
+    /// used to power the searchable vehicle dropdown on the entry screen.
+    /// </summary>
+    public async Task<List<VehicleSummary>> GetKnownVehiclesAsync()
+    {
+        try
+        {
+            _logger.LogInformation("Loading known vehicles for autocomplete");
+            var records = await _context.ParkingRecords
+                .AsNoTracking()
+                .OrderByDescending(r => r.EntryTime)
+                .Select(r => new { r.VehicleNumber, r.OwnerName, r.EntryTime })
+                .ToListAsync();
+
+            return records
+                .GroupBy(r => r.VehicleNumber.Trim().ToUpper())
+                .Select(g =>
+                {
+                    var latest = g.First();
+                    return new VehicleSummary
+                    {
+                        VehicleNumber = latest.VehicleNumber,
+                        OwnerName = latest.OwnerName,
+                        LastSeen = latest.EntryTime
+                    };
+                })
+                .OrderBy(v => v.VehicleNumber)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load known vehicles");
+            return new List<VehicleSummary>();
         }
     }
 

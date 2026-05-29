@@ -33,10 +33,49 @@
 
             <div class="mb-3">
                 <label class="form-label">Vehicle Number</label>
-                <input type="text" class="form-control" @bind="vehicleNumber" placeholder="e.g., ABC-1234" />
+                <MudAutocomplete T="VehicleSummary"
+                                 Value="selectedVehicle"
+                                 ValueChanged="OnVehicleSelected"
+                                 SearchFunc="SearchVehiclesAsync"
+                                 Text="@vehicleNumber"
+                                 TextChanged="OnVehicleTextChanged"
+                                 ToStringFunc="@(v => v?.VehicleNumber ?? string.Empty)"
+                                 Placeholder="Search or type a plate (e.g., ABC-1234)"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense"
+                                 Clearable="true"
+                                 CoerceText="false"
+                                 CoerceValue="false"
+                                 ResetValueOnEmptyText="true"
+                                 DebounceInterval="150"
+                                 MinCharacters="0"
+                                 Dense="true"
+                                 AdornmentIcon="@Icons.Material.Filled.DirectionsCar"
+                                 Adornment="Adornment.Start">
+                    <ItemTemplate Context="vehicle">
+                        <div class="d-flex flex-column">
+                            <strong>@vehicle.VehicleNumber</strong>
+                            <small class="muted-text">@vehicle.OwnerName · Last seen @vehicle.LastSeen.ToString("yyyy-MM-dd")</small>
+                        </div>
+                    </ItemTemplate>
+                    <NoItemsTemplate>
+                        <div class="px-2 py-1">
+                            <div><strong>New vehicle</strong></div>
+                            <small class="muted-text">Type the plate and owner name to register it.</small>
+                        </div>
+                    </NoItemsTemplate>
+                </MudAutocomplete>
+                @if (selectedVehicle is not null)
+                {
+                    <small class="muted-text">Matched existing record — owner auto-filled.</small>
+                }
+                else if (!string.IsNullOrWhiteSpace(vehicleNumber))
+                {
+                    <small class="muted-text">New vehicle — will be registered on entry.</small>
+                }
             </div>
 
-            <div class="mb-3">
+            <div class="mb-3 d-flex gap-2 flex-wrap">
                 <button class="btn btn-outline-secondary btn-sm" @onclick="LoadVehicleHistory" disabled="@string.IsNullOrWhiteSpace(vehicleNumber)">
                     <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" />
                     View Past Details
@@ -80,6 +119,26 @@
             <div class="mb-3">
                 <label class="form-label">Owner Name</label>
                 <input type="text" class="form-control" @bind="ownerName" placeholder="Enter owner name" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Parking Slot</label>
+                <MudSelect T="int"
+                           Value="selectedSlotId"
+                           ValueChanged="OnSlotChanged"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense="true"
+                           Disabled="@(availableSlots == 0)"
+                           AdornmentIcon="@Icons.Material.Filled.LocalParking"
+                           Adornment="Adornment.Start">
+                    <MudSelectItem T="int" Value="0">Auto-assign next free slot</MudSelectItem>
+                    @foreach (var slot in availableSlotList)
+                    {
+                        <MudSelectItem T="int" Value="slot.Id">Slot @slot.SlotNumber</MudSelectItem>
+                    }
+                </MudSelect>
+                <small class="muted-text">@(availableSlots == 0 ? "No slots available right now." : $"{availableSlots} slot(s) free.")</small>
             </div>
 
             <button class="btn btn-primary" @onclick="RegisterEntry" disabled="@(availableSlots == 0)">
@@ -140,22 +199,76 @@
     private List<ParkingRecord> vehicleHistory = new();
     private string historyMessage = string.Empty;
 
+    private List<VehicleSummary> knownVehicles = new();
+    private VehicleSummary? selectedVehicle;
+    private List<ParkingSlot> availableSlotList = new();
+    private int selectedSlotId = 0; // 0 = auto-assign
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             await LoadAvailableSlots();
+            knownVehicles = await RecordService.GetKnownVehiclesAsync();
         }
         catch (Exception ex)
         {
-            message = $"Failed to load available slots: {ex.Message}";
+            message = $"Failed to initialise entry screen: {ex.Message}";
             availableSlots = 0;
         }
     }
 
     private async Task LoadAvailableSlots()
     {
-        availableSlots = await SlotService.GetAvailableSlotsCountAsync();
+        availableSlotList = await SlotService.GetAvailableSlotsAsync();
+        availableSlots = availableSlotList.Count;
+
+        // Reset slot choice if it's no longer available.
+        if (selectedSlotId != 0 && !availableSlotList.Any(s => s.Id == selectedSlotId))
+        {
+            selectedSlotId = 0;
+        }
+    }
+
+    private Task<IEnumerable<VehicleSummary>> SearchVehiclesAsync(string value, CancellationToken token)
+    {
+        IEnumerable<VehicleSummary> results = knownVehicles;
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            results = knownVehicles.Where(v =>
+                v.VehicleNumber.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                v.OwnerName.Contains(value, StringComparison.OrdinalIgnoreCase));
+        }
+        return Task.FromResult(results.Take(20));
+    }
+
+    private void OnVehicleSelected(VehicleSummary? vehicle)
+    {
+        selectedVehicle = vehicle;
+        if (vehicle is not null)
+        {
+            vehicleNumber = vehicle.VehicleNumber;
+            ownerName = vehicle.OwnerName;
+        }
+    }
+
+    private void OnVehicleTextChanged(string value)
+    {
+        vehicleNumber = value ?? string.Empty;
+
+        // If the typed text no longer matches the selected vehicle, treat it as a new entry
+        // and clear the auto-filled owner so the operator types it explicitly.
+        if (selectedVehicle is not null &&
+            !string.Equals(selectedVehicle.VehicleNumber, vehicleNumber, StringComparison.OrdinalIgnoreCase))
+        {
+            selectedVehicle = null;
+            ownerName = string.Empty;
+        }
+    }
+
+    private void OnSlotChanged(int slotId)
+    {
+        selectedSlotId = slotId;
     }
 
     private async Task RegisterEntry()
@@ -167,7 +280,8 @@
             return;
         }
 
-        var success = await RecordService.RecordVehicleEntryAsync(vehicleNumber, ownerName);
+        int? slotIdToUse = selectedSlotId == 0 ? (int?)null : selectedSlotId;
+        var success = await RecordService.RecordVehicleEntryAsync(vehicleNumber.Trim(), ownerName.Trim(), slotIdToUse);
 
         if (success)
         {
@@ -175,12 +289,20 @@
             isSuccess = true;
             vehicleNumber = string.Empty;
             ownerName = string.Empty;
+            selectedVehicle = null;
+            selectedSlotId = 0;
+            vehicleHistory = new();
+            historyMessage = string.Empty;
             await LoadAvailableSlots();
+            knownVehicles = await RecordService.GetKnownVehiclesAsync();
         }
         else
         {
-            message = "Failed to register vehicle. No available slots.";
+            message = slotIdToUse.HasValue
+                ? "Failed to register vehicle. The selected slot is no longer available."
+                : "Failed to register vehicle. No available slots.";
             isSuccess = false;
+            await LoadAvailableSlots();
         }
     }
 
