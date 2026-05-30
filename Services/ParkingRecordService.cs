@@ -170,21 +170,17 @@ public class ParkingRecordService
     {
         try
         {
-            var totalCount = await _context.ParkingRecords
-                .AsNoTracking()
-                .CountAsync(r => r.IsCompleted);
-
-            // Project just the Duration scalar (single MySQL TIME column) instead
-            // of pulling full rows with their ParkingSlot navigation. The set is
-            // bounded by "completed sessions only" and the projection is one
-            // narrow column, so summing/averaging client-side stays inexpensive
-            // even for thousands of rows — and avoids relying on Pomelo
-            // translating TimeSpan arithmetic to SQL.
-            var durations = await _context.ParkingRecords
-                .AsNoTracking()
-                .Where(r => r.IsCompleted && r.Duration != null)
+            // Reuse the completed-record projection that already powers the
+            // report table. This keeps the summary aligned with the rows shown
+            // on screen and avoids provider-specific issues around aggregating
+            // MySQL TIME values in SQL.
+            var completedRecords = await GetCompletedRecordsAsync();
+            var durations = completedRecords
+                .Where(r => r.Duration.HasValue)
                 .Select(r => r.Duration!.Value)
-                .ToListAsync();
+                .ToList();
+
+            var totalCount = completedRecords.Count;
 
             var total = durations.Count == 0
                 ? TimeSpan.Zero

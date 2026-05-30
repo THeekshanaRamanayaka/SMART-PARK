@@ -21,7 +21,7 @@
     </div>
     <div class="page-actions">
         <div class="btn-group" role="group">
-            <button class="btn btn-success" @onclick="ExportReport"
+                <button class="btn btn-success" @onclick="ExportReport"
                     disabled="@(summary.CompletedCount == 0 || isExporting)">
                 <MudIcon Icon="@Icons.Material.Filled.IosShare" Size="Size.Small" />
                 @(isExporting ? "Exporting..." : "Export Overall CSV")
@@ -152,9 +152,9 @@
 </div>
 
 @code {
-    // The visible table only holds one page of rows; aggregate stats live in
-    // `summary` (computed server-side) so they remain accurate regardless of
-    // which page is currently shown. CSV export pulls the full set on demand.
+    // The report now renders from a single completed-record dataset so the
+    // table and stats always stay in sync.
+    private List<ParkingRecord> allCompletedRecords = new();
     private List<ParkingRecord> completedRecords = new();
     private CompletedRecordsSummary summary = new();
 
@@ -172,51 +172,53 @@
     private string AverageDurationText =>
         summary.CompletedCount == 0 ? "0h" : FormatDuration(summary.AverageDuration);
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        await LoadAsync(includeSummary: true);
+        await LoadAsync();
     }
 
-    private async Task LoadAsync(bool includeSummary)
+    private async Task LoadAsync()
     {
         isLoading = true;
         try
         {
-            // Run the page query and (optionally) the summary in parallel. The
-            // summary is only refreshed on initial load and when paging size
-            // changes — paging through results does not change the totals, so
-            // we avoid recomputing it on every page click.
-            var pageTask = RecordService.GetCompletedRecordsPageAsync(currentPage, currentPageSize);
-            var summaryTask = includeSummary
-                ? RecordService.GetCompletedSummaryAsync()
-                : Task.FromResult(summary);
+            allCompletedRecords = await RecordService.GetCompletedRecordsAsync();
 
-            await Task.WhenAll(pageTask, summaryTask);
+            var durations = allCompletedRecords
+                .Where(r => r.Duration.HasValue)
+                .Select(r => r.Duration!.Value)
+                .ToList();
 
-            var pageResult = pageTask.Result;
-            completedRecords = pageResult.Items.ToList();
-            summary = summaryTask.Result;
+            var total = durations.Count == 0
+                ? TimeSpan.Zero
+                : durations.Aggregate(TimeSpan.Zero, (acc, d) => acc + d);
 
-            // If the separate summary query failed or returned zero but the
-            // paged query indicates there are rows, use the paged total as a
-            // fallback so the UI can show pagination and enable exports.
-            if (summary.CompletedCount == 0 && pageResult.TotalCount > 0)
+            summary = new CompletedRecordsSummary
             {
-                summary = new CompletedRecordsSummary
-                {
-                    CompletedCount = pageResult.TotalCount,
-                    TotalDuration = summary.TotalDuration,
-                    AverageDuration = summary.AverageDuration
-                };
+                CompletedCount = allCompletedRecords.Count,
+                TotalDuration = total,
+                AverageDuration = durations.Count == 0
+                    ? TimeSpan.Zero
+                    : TimeSpan.FromTicks(total.Ticks / durations.Count)
+            };
+
+            var totalPages = currentPageSize <= 0
+                ? 1
+                : (int)Math.Ceiling(allCompletedRecords.Count / (double)currentPageSize);
+
+            if (totalPages == 0)
+            {
+                currentPage = 1;
+                completedRecords = new();
             }
-
-            // Guard against landing past the last page (e.g. when currentPageSize
-            // grows after rows have been deleted elsewhere).
-            if (completedRecords.Count == 0 && summary.CompletedCount > 0 && currentPage > 1)
+            else
             {
-                currentPage = Math.Max(1, pageResult.TotalPages);
-                var retry = await RecordService.GetCompletedRecordsPageAsync(currentPage, currentPageSize);
-                completedRecords = retry.Items.ToList();
+                currentPage = Math.Min(currentPage, totalPages);
+                currentPage = Math.Max(1, currentPage);
+                completedRecords = allCompletedRecords
+                    .Skip((currentPage - 1) * currentPageSize)
+                    .Take(currentPageSize)
+                    .ToList();
             }
         }
         catch (Exception ex)
@@ -233,14 +235,14 @@
     private async Task OnPageChanged(int newPage)
     {
         currentPage = newPage;
-        await LoadAsync(includeSummary: false);
+        await LoadAsync();
     }
 
     private async Task OnPageSizeChanged(int newSize)
     {
         currentPageSize = newSize;
         currentPage = 1;
-        await LoadAsync(includeSummary: false);
+        await LoadAsync();
     }
 
     private async Task ExportReport()
@@ -258,8 +260,7 @@
         {
             // Export must cover the full dataset, not just the currently
             // displayed page, so we re-query the unpaginated list here.
-            var allCompleted = await RecordService.GetCompletedRecordsAsync();
-            var csv = BuildCsv(allCompleted);
+            var csv = BuildCsv(allCompletedRecords);
             var fileName = $"SmartPark-Report-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             var directory = ResolveExportDirectory();
             Directory.CreateDirectory(directory);
@@ -268,10 +269,10 @@
             // UTF-8 with BOM so Excel on Windows opens it cleanly.
             await File.WriteAllTextAsync(fullPath, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-            Logger.LogInformation("Exported parking report ({Count} rows) to {Path}", allCompleted.Count, fullPath);
+            Logger.LogInformation("Exported parking report ({Count} rows) to {Path}", allCompletedRecords.Count, fullPath);
 
             exportSucceeded = true;
-            exportMessage = $"Exported {allCompleted.Count} sessions to {fullPath}";
+            exportMessage = $"Exported {allCompletedRecords.Count} sessions to {fullPath}";
         }
         catch (Exception ex)
         {
