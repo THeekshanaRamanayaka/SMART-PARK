@@ -250,9 +250,37 @@ public class ParkingRecordService
 
     public async Task<bool> RecordVehicleEntryAsync(string vehicleNumber, string ownerName, int? slotId = null)
     {
+        // Use an explicit transaction to keep vehicle creation, record creation
+        // and slot update atomic.
+        await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
             _logger.LogInformation("Recording vehicle entry for {VehicleNumber} (slotId={SlotId})", vehicleNumber, slotId);
+
+            var plateNorm = vehicleNumber.Trim().ToUpper();
+            var vehicle = await _context.Vehicles.FirstOrDefaultAsync(v => v.PlateNormalized == plateNorm);
+            if (vehicle == null)
+            {
+                vehicle = new Vehicle
+                {
+                    Plate = vehicleNumber.Trim(),
+                    PlateNormalized = plateNorm,
+                    OwnerName = ownerName,
+                    LastSeen = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Vehicles.Add(vehicle);
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                vehicle.OwnerName = ownerName;
+                vehicle.LastSeen = DateTime.UtcNow;
+                vehicle.UpdatedAt = DateTime.UtcNow;
+                _context.Vehicles.Update(vehicle);
+                await _context.SaveChangesAsync();
+            }
 
             ParkingSlot? targetSlot;
             if (slotId.HasValue)
@@ -261,6 +289,7 @@ public class ParkingRecordService
                 if (targetSlot == null || targetSlot.IsOccupied)
                 {
                     _logger.LogWarning("Requested slot {SlotId} is unavailable for vehicle {VehicleNumber}", slotId, vehicleNumber);
+                    await tx.RollbackAsync();
                     return false;
                 }
             }
@@ -270,6 +299,7 @@ public class ParkingRecordService
                 if (targetSlot == null)
                 {
                     _logger.LogWarning("No available slot found for vehicle {VehicleNumber}", vehicleNumber);
+                    await tx.RollbackAsync();
                     return false;
                 }
             }
@@ -278,20 +308,31 @@ public class ParkingRecordService
             {
                 VehicleNumber = vehicleNumber,
                 OwnerName = ownerName,
+                VehicleId = vehicle.Id,
                 ParkingSlotId = targetSlot.Id,
-                EntryTime = DateTime.Now,
+                EntryTime = DateTime.UtcNow,
                 IsCompleted = false
             };
 
             _context.ParkingRecords.Add(record);
-            await _slotService.UpdateSlotStatusAsync(targetSlot.Id, true);
+            // Update slot occupied status
+            var updated = await _slotService.UpdateSlotStatusAsync(targetSlot.Id, true);
+            if (!updated)
+            {
+                _logger.LogWarning("Failed to update slot status for slot {SlotId}", targetSlot.Id);
+                await tx.RollbackAsync();
+                return false;
+            }
+
             await _context.SaveChangesAsync();
+            await tx.CommitAsync();
             _logger.LogInformation("Vehicle {VehicleNumber} assigned to slot {SlotNumber}", vehicleNumber, targetSlot.SlotNumber);
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to record vehicle entry for {VehicleNumber}", vehicleNumber);
+            try { await tx.RollbackAsync(); } catch { }
             return false;
         }
     }
@@ -305,6 +346,24 @@ public class ParkingRecordService
         try
         {
             _logger.LogInformation("Loading known vehicles for autocomplete");
+
+            // Prefer the normalized Vehicles table when present (fast indexed lookup).
+            var vehicles = await _context.Vehicles
+                .AsNoTracking()
+                .OrderBy(v => v.Plate)
+                .ToListAsync();
+
+            if (vehicles != null && vehicles.Count > 0)
+            {
+                return vehicles.Select(v => new VehicleSummary
+                {
+                    VehicleNumber = v.Plate,
+                    OwnerName = v.OwnerName ?? string.Empty,
+                    LastSeen = v.LastSeen ?? v.CreatedAt
+                }).OrderBy(v => v.VehicleNumber).ToList();
+            }
+
+            // Fallback: infer from ParkingRecords if Vehicles is empty (back-compat)
             var records = await _context.ParkingRecords
                 .AsNoTracking()
                 .OrderByDescending(r => r.EntryTime)
@@ -540,6 +599,7 @@ public class ParkingRecordService
 
     public async Task<bool> RecordVehicleExitAsync(int recordId)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
             _logger.LogInformation("Recording vehicle exit for record {RecordId}", recordId);
@@ -547,27 +607,38 @@ public class ParkingRecordService
             if (record == null)
             {
                 _logger.LogWarning("Record {RecordId} was not found", recordId);
+                await tx.RollbackAsync();
                 return false;
             }
 
             if (record.IsCompleted)
             {
                 _logger.LogWarning("Record {RecordId} was already completed", recordId);
+                await tx.RollbackAsync();
                 return false;
             }
 
-            record.ExitTime = DateTime.Now;
+            record.ExitTime = DateTime.UtcNow;
             record.Duration = record.ExitTime - record.EntryTime;
             record.IsCompleted = true;
 
-            await _slotService.UpdateSlotStatusAsync(record.ParkingSlotId, false);
+            var updated = await _slotService.UpdateSlotStatusAsync(record.ParkingSlotId, false);
+            if (!updated)
+            {
+                _logger.LogWarning("Failed to update slot status for slot {SlotId} during exit", record.ParkingSlotId);
+                await tx.RollbackAsync();
+                return false;
+            }
+
             await _context.SaveChangesAsync();
+            await tx.CommitAsync();
             _logger.LogInformation("Vehicle exit recorded for record {RecordId}", recordId);
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to record vehicle exit for record {RecordId}", recordId);
+            try { await tx.RollbackAsync(); } catch { }
             return false;
         }
     }

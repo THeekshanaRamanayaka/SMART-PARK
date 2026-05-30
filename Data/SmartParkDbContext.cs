@@ -7,6 +7,7 @@ public class SmartParkDbContext : DbContext
 {
     public DbSet<ParkingSlot> ParkingSlots { get; set; }
     public DbSet<ParkingRecord> ParkingRecords { get; set; }
+    public DbSet<Vehicle> Vehicles { get; set; }
     public DbSet<AppUser> AppUsers { get; set; }
 
     public SmartParkDbContext(DbContextOptions<SmartParkDbContext> options) : base(options)
@@ -22,6 +23,16 @@ public class SmartParkDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.SlotNumber).IsRequired().HasMaxLength(10);
             entity.HasIndex(e => e.SlotNumber).IsUnique();
+        });
+
+        modelBuilder.Entity<Vehicle>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Plate).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.PlateNormalized).IsRequired().HasMaxLength(20);
+            entity.HasIndex(e => e.PlateNormalized).IsUnique();
+            entity.Property(e => e.OwnerName).HasMaxLength(100);
+            entity.Property(e => e.RowVersion).IsRowVersion();
         });
 
         modelBuilder.Entity<ParkingRecord>(entity =>

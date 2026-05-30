@@ -20,7 +20,9 @@ public class DatabaseInitializer
         _logger.LogInformation("Ensuring SmartPark database schema exists");
 
         // Create schema directly for MySQL on first run.
-        await _context.Database.EnsureCreatedAsync();
+        // Use EF Core migrations in production; migrate the database to the latest
+        // version on startup so schema changes are applied predictably.
+        await _context.Database.MigrateAsync();
 
         _logger.LogInformation("Database schema is ready");
     }
