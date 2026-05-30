@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using SmartPark.Data;
 using SmartPark.Services;
@@ -36,6 +37,11 @@ public static class MauiProgram
         // Services
         builder.Services.AddScoped<ParkingSlotService>();
         builder.Services.AddScoped<ParkingRecordService>();
+        builder.Services.AddScoped<AuthService>();
+        // Client-side authentication services
+        builder.Services.AddScoped<AuthenticationService>();
+        builder.Services.AddScoped<AuthenticationStateProvider, ClientAuthStateProvider>();
+        builder.Services.AddAuthorizationCore();
         builder.Services.AddTransient<DatabaseInitializer>();
         builder.Services.AddSingleton<LocalApiServer>();
 
@@ -50,7 +56,13 @@ public static class MauiProgram
 
         var app = builder.Build();
 
-        // Initialize the database after startup so the first scene can render immediately.
+        // Start the local API server immediately so the login endpoint is reachable
+        // even if the database initializer hasn't finished yet.
+        var localApiServer = app.Services.GetRequiredService<LocalApiServer>();
+        _ = localApiServer.StartAsync();
+
+        // Initialize the database in the background; failures are logged but do not
+        // prevent the app or the API server from starting.
         _ = Task.Run(async () =>
         {
             try
@@ -58,14 +70,11 @@ public static class MauiProgram
                 using var scope = app.Services.CreateScope();
                 var dbInitializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
                 await dbInitializer.InitializeAsync();
-
-                var localApiServer = scope.ServiceProvider.GetRequiredService<LocalApiServer>();
-                await localApiServer.StartAsync();
             }
             catch (Exception ex)
             {
                 var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-                logger.LogError(ex, "Application startup failed");
+                logger.LogError(ex, "Database initialization failed");
             }
         });
 

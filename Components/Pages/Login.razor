@@ -1,0 +1,118 @@
+@page "/login"
+@inject SmartPark.Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Sign in - SmartPark</PageTitle>
+
+<div class="login-shell">
+    <div class="login-card">
+        <div class="login-brand">
+            <div class="login-logo">P</div>
+            <MudText Typo="Typo.h5" Class="login-title">SmartPark</MudText>
+            <MudText Typo="Typo.body2" Class="login-subtitle">Sign in to continue</MudText>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@Error</MudAlert>
+        }
+
+        <MudTextField @bind-Value="Username"
+                      Label="Username or email"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Person"
+                      Class="mb-3"
+                      Disabled="@_loading"
+                      OnKeyDown="OnKeyDown" />
+
+        <MudTextField @bind-Value="Password"
+                      Label="Password"
+                      Variant="Variant.Outlined"
+                      InputType="@_passwordInputType"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@_passwordIcon"
+                      OnAdornmentClick="TogglePasswordVisibility"
+                      Class="mb-5"
+                      Disabled="@_loading"
+                      OnKeyDown="OnKeyDown" />
+
+        <MudButton FullWidth="true"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Size="Size.Large"
+                   OnClick="HandleLogin"
+                   Disabled="@_loading">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Signing in…</span>
+            }
+            else
+            {
+                <span>Sign in</span>
+            }
+        </MudButton>
+    </div>
+</div>
+
+@code {
+    private string Username { get; set; } = string.Empty;
+    private string Password { get; set; } = string.Empty;
+    private string? Error;
+    private bool _loading;
+    private bool _passwordVisible;
+    private InputType _passwordInputType = InputType.Password;
+    private string _passwordIcon = Icons.Material.Filled.VisibilityOff;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/", replace: true);
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        _passwordVisible = !_passwordVisible;
+        _passwordInputType = _passwordVisible ? InputType.Text : InputType.Password;
+        _passwordIcon = _passwordVisible ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_loading)
+        {
+            await HandleLogin();
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        Error = null;
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var (ok, err) = await AuthService.LoginAsync(Username?.Trim() ?? string.Empty, Password ?? string.Empty);
+            _loading = false;
+            if (!ok)
+            {
+                Error = err ?? "Invalid credentials. Please try again.";
+                StateHasChanged();
+                return;
+            }
+            Navigation.NavigateTo("/", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _loading = false;
+            Error = ex.Message;
+            StateHasChanged();
+        }
+    }
+}

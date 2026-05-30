@@ -110,6 +110,40 @@ a {
     white-space: nowrap;
 }
 
+.appbar-user {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 0.75rem;
+}
+
+.appbar-user .mud-typography {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.appbar-user .mud-button-root {
+    min-width: 0;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: var(--sp-radius);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    background: rgba(255, 255, 255, 0.08);
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.appbar-user .mud-button-root:hover {
+    background: rgba(240, 68, 56, 0.18);
+    border-color: rgba(240, 68, 56, 0.5);
+    color: #fca5a5;
+}
+
 .smart-drawer {
     background:
         linear-gradient(180deg, #0b1220 0%, #121a2d 58%, #0d1727 100%);

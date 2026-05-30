@@ -9,6 +9,7 @@ public class SmartParkDbContext : DbContext
     public DbSet<ParkingRecord> ParkingRecords { get; set; }
     public DbSet<Vehicle> Vehicles { get; set; }
     public DbSet<AppUser> AppUsers { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public SmartParkDbContext(DbContextOptions<SmartParkDbContext> options) : base(options)
     {
@@ -56,6 +57,17 @@ public class SmartParkDbContext : DbContext
             entity.Property(e => e.Role).IsRequired().HasMaxLength(20);
             entity.HasIndex(e => e.Username).IsUnique();
             entity.HasIndex(e => e.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Token).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ExpiresAt).IsRequired();
+            entity.HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(e => e.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

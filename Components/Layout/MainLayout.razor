@@ -22,6 +22,18 @@
             <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" />
             <span>@currentTime.ToString("MMM dd, yyyy - HH:mm:ss")</span>
         </div>
+
+        <AuthorizeView Context="auth">
+            <Authorized>
+                <div class="appbar-user">
+                    <MudText Typo="Typo.body2">@GetUserDisplayName(auth.User)</MudText>
+                    <MudButton Variant="Variant.Text" Color="Color.Inherit" OnClick="OnLogout">Logout</MudButton>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Variant="Variant.Text" Color="Color.Inherit" Href="/login">Sign in</MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
     </MudAppBar>
 
     <MudDrawer @bind-Open="drawerOpen" Elevation="0" Variant="DrawerVariant.Mini" OpenMiniOnHover="false"
@@ -75,6 +87,17 @@
         </MudLayout>
 
 @code {
+    [Inject]
+    public SmartPark.Services.AuthenticationService AuthService { get; set; } = default!;
+
+    private async Task OnLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login", replace: true);
+    }
+
+    [Inject]
+    public NavigationManager Navigation { get; set; } = default!;
     private bool drawerOpen = true;
     private DateTime currentTime = DateTime.Now;
     private System.Threading.Timer? clockTimer;
@@ -106,6 +129,14 @@
     private void ToggleDrawer()
     {
         drawerOpen = !drawerOpen;
+    }
+
+    private static string GetUserDisplayName(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (user == null) return string.Empty;
+        var fn = user.Claims.FirstOrDefault(c => c.Type == "fullName")?.Value;
+        if (!string.IsNullOrWhiteSpace(fn)) return fn;
+        return user.Identity?.Name ?? string.Empty;
     }
 
     protected override void OnInitialized()

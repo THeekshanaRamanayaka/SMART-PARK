@@ -127,6 +127,7 @@ public sealed class LocalApiServer : IAsyncDisposable
             using var scope = _scopeFactory.CreateScope();
             var slotService = scope.ServiceProvider.GetRequiredService<ParkingSlotService>();
             var recordService = scope.ServiceProvider.GetRequiredService<ParkingRecordService>();
+            var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
 
             if (method == "GET" && path == "/health")
             {
@@ -137,6 +138,63 @@ public sealed class LocalApiServer : IAsyncDisposable
                     localApi = true,
                     baseUrl = _prefix
                 }).ConfigureAwait(false);
+                return;
+            }
+
+            if (method == "POST" && path == "/api/auth/login")
+            {
+                var login = await ReadJsonBodyAsync<LoginRequest>(request).ConfigureAwait(false);
+                if (login == null || string.IsNullOrWhiteSpace(login.Username) || string.IsNullOrWhiteSpace(login.Password))
+                {
+                    await WriteErrorAsync(response, HttpStatusCode.BadRequest, "username and password are required").ConfigureAwait(false);
+                    return;
+                }
+
+                var (user, accessToken, refreshToken) = await authService.AuthenticateAsync(login.Username.Trim(), login.Password).ConfigureAwait(false);
+                if (user == null || accessToken == null)
+                {
+                    await WriteErrorAsync(response, HttpStatusCode.Unauthorized, "Invalid credentials").ConfigureAwait(false);
+                    return;
+                }
+
+                await WriteJsonAsync(response, new
+                {
+                    accessToken,
+                    refreshToken,
+                    user = new { id = user.Id, username = user.Username, fullName = user.FullName, email = user.Email, role = user.Role }
+                }, HttpStatusCode.OK).ConfigureAwait(false);
+                return;
+            }
+
+            if (method == "POST" && path == "/api/auth/refresh")
+            {
+                var body = await ReadJsonBodyAsync<RefreshRequest>(request).ConfigureAwait(false);
+                if (body == null || string.IsNullOrWhiteSpace(body.RefreshToken))
+                {
+                    await WriteErrorAsync(response, HttpStatusCode.BadRequest, "refreshToken is required").ConfigureAwait(false);
+                    return;
+                }
+
+                var (user, accessToken, refreshToken) = await authService.RefreshAsync(body.RefreshToken).ConfigureAwait(false);
+                if (user == null || accessToken == null)
+                {
+                    await WriteErrorAsync(response, HttpStatusCode.Unauthorized, "Invalid refresh token").ConfigureAwait(false);
+                    return;
+                }
+
+                await WriteJsonAsync(response, new { accessToken, refreshToken }).ConfigureAwait(false);
+                return;
+            }
+
+            if (method == "POST" && path == "/api/auth/logout")
+            {
+                var body = await ReadJsonBodyAsync<RefreshRequest>(request).ConfigureAwait(false);
+                if (body != null && !string.IsNullOrWhiteSpace(body.RefreshToken))
+                {
+                    await authService.RevokeRefreshTokenAsync(body.RefreshToken).ConfigureAwait(false);
+                }
+
+                await WriteJsonAsync(response, new { success = true }).ConfigureAwait(false);
                 return;
             }
 
@@ -160,6 +218,8 @@ public sealed class LocalApiServer : IAsyncDisposable
 
             if (method == "POST" && path == "/api/slots")
             {
+                if (await RequireAuthenticationAsync(request, response, authService).ConfigureAwait(false) == null) return;
+
                 var slotRequest = await ReadJsonBodyAsync<SlotRequest>(request).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(slotRequest?.SlotNumber))
                 {
@@ -180,6 +240,8 @@ public sealed class LocalApiServer : IAsyncDisposable
 
             if (method == "PUT" && TryGetTrailingId(path, "/api/slots", out var slotId))
             {
+                if (await RequireAuthenticationAsync(request, response, authService).ConfigureAwait(false) == null) return;
+
                 var slotRequest = await ReadJsonBodyAsync<SlotRequest>(request).ConfigureAwait(false);
                 var slot = await slotService.GetSlotByIdAsync(slotId).ConfigureAwait(false);
 
@@ -206,6 +268,8 @@ public sealed class LocalApiServer : IAsyncDisposable
 
             if (method == "DELETE" && TryGetTrailingId(path, "/api/slots", out slotId))
             {
+                if (await RequireAuthenticationAsync(request, response, authService).ConfigureAwait(false) == null) return;
+
                 var success = await slotService.DeleteSlotAsync(slotId).ConfigureAwait(false);
                 if (!success)
                 {
@@ -269,6 +333,8 @@ public sealed class LocalApiServer : IAsyncDisposable
 
             if (method == "POST" && path == "/api/records/entry")
             {
+                if (await RequireAuthenticationAsync(request, response, authService).ConfigureAwait(false) == null) return;
+
                 var entryRequest = await ReadJsonBodyAsync<EntryRequest>(request).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(entryRequest?.VehicleNumber) || string.IsNullOrWhiteSpace(entryRequest.OwnerName))
                 {
@@ -283,6 +349,8 @@ public sealed class LocalApiServer : IAsyncDisposable
 
             if (method == "POST" && path.EndsWith("/exit", StringComparison.OrdinalIgnoreCase) && TryGetTrailingId(path, "/api/records", out recordId))
             {
+                if (await RequireAuthenticationAsync(request, response, authService).ConfigureAwait(false) == null) return;
+
                 var success = await recordService.RecordVehicleExitAsync(recordId).ConfigureAwait(false);
                 if (!success)
                 {
@@ -390,6 +458,46 @@ public sealed class LocalApiServer : IAsyncDisposable
         return null;
     }
 
+    // Authorization helpers
+    private static string ExtractBearerToken(HttpListenerRequest request)
+    {
+        var authHeader = request.Headers["Authorization"] ?? string.Empty;
+        var parts = authHeader.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 2 ? parts[1] : string.Empty;
+    }
+
+    private (System.Security.Claims.ClaimsPrincipal? principal, string? error) ValidateTokenFromRequest(HttpListenerRequest request, AuthService authService)
+    {
+        var token = ExtractBearerToken(request);
+        return authService.ValidateJwtToken(token);
+    }
+
+    private async Task<System.Security.Claims.ClaimsPrincipal?> RequireAuthenticationAsync(HttpListenerRequest request, HttpListenerResponse response, AuthService authService)
+    {
+        var (principal, err) = ValidateTokenFromRequest(request, authService);
+        if (principal == null)
+        {
+            await WriteErrorAsync(response, HttpStatusCode.Unauthorized, "Authorization required").ConfigureAwait(false);
+            return null;
+        }
+
+        return principal;
+    }
+
+    private async Task<System.Security.Claims.ClaimsPrincipal?> RequireRoleAsync(HttpListenerRequest request, HttpListenerResponse response, AuthService authService, string role)
+    {
+        var principal = await RequireAuthenticationAsync(request, response, authService).ConfigureAwait(false);
+        if (principal == null) return null;
+
+        if (!principal.IsInRole(role))
+        {
+            await WriteErrorAsync(response, HttpStatusCode.Forbidden, $"{role} role required").ConfigureAwait(false);
+            return null;
+        }
+
+        return principal;
+    }
+
     private sealed class SlotRequest
     {
         public string? SlotNumber { get; set; }
@@ -400,5 +508,16 @@ public sealed class LocalApiServer : IAsyncDisposable
     {
         public string? VehicleNumber { get; set; }
         public string? OwnerName { get; set; }
+    }
+
+    private sealed class LoginRequest
+    {
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+    }
+
+    private sealed class RefreshRequest
+    {
+        public string? RefreshToken { get; set; }
     }
 }

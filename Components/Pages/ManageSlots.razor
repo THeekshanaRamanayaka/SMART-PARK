@@ -1,4 +1,5 @@
 @page "/slots"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @using SmartPark.Services
 @using SmartPark.Models
 @inject ParkingSlotService SlotService
