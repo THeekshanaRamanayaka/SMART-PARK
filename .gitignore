@@ -16,7 +16,7 @@
 .DS_Store
 
 # Ignore generated docs index
-docs/
+# docs/ (tracked) — removed so documentation files can be versioned
 
 Tools/generate_pdfs.py
 Tools/generate_pptx.py
