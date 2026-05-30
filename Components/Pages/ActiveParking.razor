@@ -15,7 +15,7 @@
         <p class="page-subtitle">See every vehicle currently inside the lot and record exits as they leave.</p>
     </div>
     <div class="page-actions">
-        <span class="status-pill"><span class="status-dot warning"></span>@activeRecords.Count vehicles inside</span>
+        <span class="status-pill"><span class="status-dot warning"></span>@totalCount vehicles active</span>
         <a href="/entry" class="btn btn-primary">
             <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" />
             New Entry
@@ -38,6 +38,13 @@
                 <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Color="Color.Primary" Size="Size.Large" />
                 <strong>No active parking records</strong>
                 <p>New vehicle entries will appear here.</p>
+            </div>
+        }
+        else if (isLoading)
+        {
+            <div class="empty-state">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Medium" />
+                <p class="mt-2">Loading active sessions…</p>
             </div>
         }
         else
@@ -76,6 +83,12 @@
                     </table>
                 </div>
             </div>
+
+            <Pager Page="@currentPage"
+                   PageSize="@currentPageSize"
+                   TotalCount="@totalCount"
+                   PageChanged="OnPageChanged"
+                   PageSizeChanged="OnPageSizeChanged" />
         }
 
         @if (!string.IsNullOrEmpty(message))
@@ -87,6 +100,10 @@
 
 @code {
     private List<ParkingRecord> activeRecords = new();
+    private int currentPage = 1;
+    private int currentPageSize = 10;
+    private int totalCount;
+    private bool isLoading;
     private string message = string.Empty;
 
     protected override async Task OnInitializedAsync()
@@ -104,7 +121,44 @@
 
     private async Task LoadActiveRecords()
     {
-        activeRecords = await RecordService.GetActiveRecordsAsync();
+        isLoading = true;
+        try
+        {
+            var result = await RecordService.GetActiveRecordsPageAsync(currentPage, currentPageSize);
+            activeRecords = result.Items.ToList();
+            totalCount = result.TotalCount;
+
+            if (activeRecords.Count == 0 && totalCount > 0 && currentPage > 1)
+            {
+                currentPage = Math.Max(1, result.TotalPages);
+                var retry = await RecordService.GetActiveRecordsPageAsync(currentPage, currentPageSize);
+                activeRecords = retry.Items.ToList();
+                totalCount = retry.TotalCount;
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Failed to load active parking records: {ex.Message}";
+            activeRecords = new();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnPageChanged(int newPage)
+    {
+        currentPage = newPage;
+        await LoadActiveRecords();
+    }
+
+    private async Task OnPageSizeChanged(int newSize)
+    {
+        currentPageSize = newSize;
+        currentPage = 1;
+        await LoadActiveRecords();
     }
 
     private static string GetDuration(DateTime entryTime)

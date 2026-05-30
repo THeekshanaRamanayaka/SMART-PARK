@@ -178,4 +178,48 @@ public class ParkingSlotService
             return 0;
         }
     }
+
+    /// <summary>
+    /// Server-side paginated view over parking slots, prioritizing availability.
+    /// Available (empty) slots appear first, followed by occupied slots, sorted by
+    /// slot number within each group. Supports efficient browsing of large slot
+    /// inventories without materializing the entire list.
+    /// </summary>
+    public async Task<PagedResult<ParkingSlot>> GetSlotsPaginatedAsync(int page, int pageSize)
+    {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize < 1 ? 10 : pageSize;
+
+        try
+        {
+            // Prioritize available slots (IsOccupied == false) first, then occupied.
+            var query = _context.ParkingSlots
+                .AsNoTracking()
+                .OrderBy(s => s.IsOccupied)
+                .ThenBy(s => s.SlotNumber);
+
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            _logger.LogInformation(
+                "Loaded parking slots page {Page} (size {PageSize}, total {Total}, prioritized by availability)",
+                page, pageSize, totalCount);
+
+            return new PagedResult<ParkingSlot>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load parking slots page {Page}", page);
+            return PagedResult<ParkingSlot>.Empty(page, pageSize);
+        }
+    }
 }

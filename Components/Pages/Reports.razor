@@ -20,11 +20,18 @@
         <p class="page-subtitle">Review completed sessions with clean operational metrics and export-ready detail.</p>
     </div>
     <div class="page-actions">
-        <button class="btn btn-success" @onclick="ExportReport"
-                disabled="@(completedRecords.Count == 0 || isExporting)">
-            <MudIcon Icon="@Icons.Material.Filled.IosShare" Size="Size.Small" />
-            @(isExporting ? "Exporting..." : "Export CSV")
-        </button>
+        <div class="btn-group" role="group">
+            <button class="btn btn-success" @onclick="ExportReport"
+                    disabled="@(summary.CompletedCount == 0 || isExporting)">
+                <MudIcon Icon="@Icons.Material.Filled.IosShare" Size="Size.Small" />
+                @(isExporting ? "Exporting..." : "Export Overall CSV")
+            </button>
+            <button class="btn btn-outline-success" @onclick="ExportByVehicleSummary"
+                    disabled="@(summary.CompletedCount == 0 || isExporting)">
+                <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
+                Export By Vehicle
+            </button>
+        </div>
     </div>
 </div>
 
@@ -45,7 +52,7 @@
                 <MudIcon Icon="@Icons.Material.Filled.TaskAlt" />
             </div>
         </div>
-        <div class="stats-number">@completedRecords.Count</div>
+        <div class="stats-number">@summary.CompletedCount</div>
         <div class="stats-trend">Total recorded exits</div>
     </div>
 
@@ -79,10 +86,17 @@
                 <h2 class="section-title">Completed parking sessions</h2>
                 <div class="muted-text">Only sessions with entry and exit times are included.</div>
             </div>
-            <span class="badge bg-success">@completedRecords.Count completed</span>
+            <span class="badge bg-success">@summary.CompletedCount completed</span>
         </div>
 
-        @if (completedRecords.Count == 0)
+        @if (isLoading)
+        {
+            <div class="empty-state">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Medium" />
+                <p class="mt-2">Loading report…</p>
+            </div>
+        }
+        else if (completedRecords.Count == 0)
         {
             <div class="empty-state">
                 <MudIcon Icon="@Icons.Material.Filled.Assessment" Color="Color.Primary" Size="Size.Large" />
@@ -110,8 +124,11 @@
                             @for (int i = 0; i < completedRecords.Count; i++)
                             {
                                 var record = completedRecords[i];
+                                // Row number is relative to the full result set, not just the
+                                // current page, so users can cross-reference with the CSV export.
+                                var rowNumber = ((currentPage - 1) * currentPageSize) + i + 1;
                                 <tr>
-                                    <td>@(i + 1)</td>
+                                    <td>@rowNumber</td>
                                     <td><span class="vehicle-plate">@record.VehicleNumber</span></td>
                                     <td>@record.OwnerName</td>
                                     <td><span class="badge bg-primary">Slot @record.ParkingSlot?.SlotNumber</span></td>
@@ -124,58 +141,111 @@
                     </table>
                 </div>
             </div>
+
+            <Pager Page="@currentPage"
+                   PageSize="@currentPageSize"
+                   TotalCount="@summary.CompletedCount"
+                   PageChanged="OnPageChanged"
+                   PageSizeChanged="OnPageSizeChanged" />
         }
     </div>
 </div>
 
 @code {
+    // The visible table only holds one page of rows; aggregate stats live in
+    // `summary` (computed server-side) so they remain accurate regardless of
+    // which page is currently shown. CSV export pulls the full set on demand.
     private List<ParkingRecord> completedRecords = new();
+    private CompletedRecordsSummary summary = new();
+
+    private int currentPage = 1;
+    private int currentPageSize = 25;
+    private bool isLoading;
+
     private bool isExporting;
     private bool exportSucceeded;
     private string? exportMessage;
 
-    private TimeSpan TotalDuration => completedRecords
-        .Where(record => record.Duration.HasValue)
-        .Aggregate(TimeSpan.Zero, (total, record) => total + record.Duration!.Value);
+    private string TotalDurationText =>
+        summary.CompletedCount == 0 ? "0h" : FormatDuration(summary.TotalDuration);
 
-    private string TotalDurationText => completedRecords.Count == 0 ? "0h" : FormatDuration(TotalDuration);
-
-    private string AverageDurationText
-    {
-        get
-        {
-            var recordsWithDuration = completedRecords.Where(record => record.Duration.HasValue).ToList();
-            if (recordsWithDuration.Count == 0)
-            {
-                return "0h";
-            }
-
-            var averageTicks = (long)recordsWithDuration.Average(record => record.Duration!.Value.Ticks);
-            return FormatDuration(TimeSpan.FromTicks(averageTicks));
-        }
-    }
+    private string AverageDurationText =>
+        summary.CompletedCount == 0 ? "0h" : FormatDuration(summary.AverageDuration);
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadAsync(includeSummary: true);
+    }
+
+    private async Task LoadAsync(bool includeSummary)
+    {
+        isLoading = true;
         try
         {
-            await LoadCompletedRecords();
+            // Run the page query and (optionally) the summary in parallel. The
+            // summary is only refreshed on initial load and when paging size
+            // changes — paging through results does not change the totals, so
+            // we avoid recomputing it on every page click.
+            var pageTask = RecordService.GetCompletedRecordsPageAsync(currentPage, currentPageSize);
+            var summaryTask = includeSummary
+                ? RecordService.GetCompletedSummaryAsync()
+                : Task.FromResult(summary);
+
+            await Task.WhenAll(pageTask, summaryTask);
+
+            var pageResult = pageTask.Result;
+            completedRecords = pageResult.Items.ToList();
+            summary = summaryTask.Result;
+
+            // If the separate summary query failed or returned zero but the
+            // paged query indicates there are rows, use the paged total as a
+            // fallback so the UI can show pagination and enable exports.
+            if (summary.CompletedCount == 0 && pageResult.TotalCount > 0)
+            {
+                summary = new CompletedRecordsSummary
+                {
+                    CompletedCount = pageResult.TotalCount,
+                    TotalDuration = summary.TotalDuration,
+                    AverageDuration = summary.AverageDuration
+                };
+            }
+
+            // Guard against landing past the last page (e.g. when currentPageSize
+            // grows after rows have been deleted elsewhere).
+            if (completedRecords.Count == 0 && summary.CompletedCount > 0 && currentPage > 1)
+            {
+                currentPage = Math.Max(1, pageResult.TotalPages);
+                var retry = await RecordService.GetCompletedRecordsPageAsync(currentPage, currentPageSize);
+                completedRecords = retry.Items.ToList();
+            }
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to load reports page");
             completedRecords = new();
-            Console.WriteLine($"Failed to load reports: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
         }
     }
 
-    private async Task LoadCompletedRecords()
+    private async Task OnPageChanged(int newPage)
     {
-        completedRecords = await RecordService.GetCompletedRecordsAsync();
+        currentPage = newPage;
+        await LoadAsync(includeSummary: false);
+    }
+
+    private async Task OnPageSizeChanged(int newSize)
+    {
+        currentPageSize = newSize;
+        currentPage = 1;
+        await LoadAsync(includeSummary: false);
     }
 
     private async Task ExportReport()
     {
-        if (completedRecords.Count == 0 || isExporting)
+        if (summary.CompletedCount == 0 || isExporting)
         {
             return;
         }
@@ -186,7 +256,10 @@
 
         try
         {
-            var csv = BuildCsv(completedRecords);
+            // Export must cover the full dataset, not just the currently
+            // displayed page, so we re-query the unpaginated list here.
+            var allCompleted = await RecordService.GetCompletedRecordsAsync();
+            var csv = BuildCsv(allCompleted);
             var fileName = $"SmartPark-Report-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             var directory = ResolveExportDirectory();
             Directory.CreateDirectory(directory);
@@ -195,10 +268,10 @@
             // UTF-8 with BOM so Excel on Windows opens it cleanly.
             await File.WriteAllTextAsync(fullPath, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-            Logger.LogInformation("Exported parking report ({Count} rows) to {Path}", completedRecords.Count, fullPath);
+            Logger.LogInformation("Exported parking report ({Count} rows) to {Path}", allCompleted.Count, fullPath);
 
             exportSucceeded = true;
-            exportMessage = $"Exported {completedRecords.Count} sessions to {fullPath}";
+            exportMessage = $"Exported {allCompleted.Count} sessions to {fullPath}";
         }
         catch (Exception ex)
         {
@@ -211,6 +284,74 @@
             isExporting = false;
             StateHasChanged();
         }
+    }
+
+    private async Task ExportByVehicleSummary()
+    {
+        if (summary.CompletedCount == 0 || isExporting)
+        {
+            return;
+        }
+
+        isExporting = true;
+        exportMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // Request all grouped vehicle summaries in one call by using a large page size.
+            var grouped = await RecordService.GetCompletedRecordsGroupedByVehiclePageAsync(1, int.MaxValue);
+            var groups = grouped.Items;
+            var csv = BuildVehicleGroupedCsv(groups);
+            var fileName = $"SmartPark-Report-ByVehicle-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+            var directory = ResolveExportDirectory();
+            Directory.CreateDirectory(directory);
+            var fullPath = Path.Combine(directory, fileName);
+
+            await File.WriteAllTextAsync(fullPath, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            Logger.LogInformation("Exported vehicle-summary report ({Count} rows) to {Path}", groups.Count, fullPath);
+
+            exportSucceeded = true;
+            exportMessage = $"Exported {groups.Count} vehicle summaries to {fullPath}";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export vehicle-summary report");
+            exportSucceeded = false;
+            exportMessage = $"Export failed: {ex.Message}";
+        }
+        finally
+        {
+            isExporting = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string BuildVehicleGroupedCsv(IReadOnlyList<VehicleGroupedRecords> groups)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("VehicleNumber,OwnerName,TotalSessions,CompletedSessions,ActiveSessions,TotalDurationHours,TotalDurationText,AvgDurationText,LastSeen");
+
+        for (var i = 0; i < groups.Count; i++)
+        {
+            var g = groups[i];
+            var totalHours = g.TotalDuration.TotalHours.ToString("F2", CultureInfo.InvariantCulture);
+            var lastSeen = g.LastSeen.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
+            sb.Append(EscapeCsv(g.VehicleNumber)).Append(',')
+              .Append(EscapeCsv(g.OwnerName)).Append(',')
+              .Append(g.TotalSessions).Append(',')
+              .Append(g.CompletedSessions).Append(',')
+              .Append(g.ActiveSessions).Append(',')
+              .Append(totalHours).Append(',')
+              .Append(EscapeCsv(FormatDuration(g.TotalDuration))).Append(',')
+              .Append(EscapeCsv(FormatDuration(g.AverageDuration))).Append(',')
+              .Append(EscapeCsv(lastSeen))
+              .AppendLine();
+        }
+
+        return sb.ToString();
     }
 
     private static string BuildCsv(IReadOnlyList<ParkingRecord> records)

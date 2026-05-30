@@ -15,16 +15,22 @@
         <p class="page-subtitle">Search vehicle history, review slots, and compare active versus completed sessions.</p>
     </div>
     <div class="page-actions">
-        <span class="status-pill"><span class="status-dot"></span>@records.Count records shown</span>
+        <span class="status-pill"><span class="status-dot"></span>@(viewByVehicle ? vehicleTotalCount : totalCount) @((viewByVehicle ? vehicleTotalCount : totalCount) == 1 ? "record" : "records") total</span>
     </div>
 </div>
 
 <div class="card mb-4">
     <div class="card-body toolbar-card">
-        <div class="panel-heading">
+        <div class="panel-heading d-flex justify-content-between align-items-start">
             <div>
                 <h2 class="section-title">Search records</h2>
                 <div class="muted-text">Find by vehicle number or slot number.</div>
+            </div>
+            <div>
+                <div class="btn-group btn-group-sm" role="group" aria-label="View mode">
+                    <button class="btn btn-outline-secondary @(viewByVehicle ? "" : "active")" @onclick="() => SetViewMode(false)">Date</button>
+                    <button class="btn btn-outline-secondary @(viewByVehicle ? "active" : "")" @onclick="() => SetViewMode(true)">Vehicle</button>
+                </div>
             </div>
         </div>
         <div class="input-group">
@@ -42,6 +48,8 @@
     </div>
 </div>
 
+// export UI removed
+
 <div class="card">
     <div class="card-body">
         <div class="panel-heading">
@@ -51,51 +59,123 @@
             </div>
         </div>
 
-        @if (records.Count == 0)
+        @if (isLoading)
         {
             <div class="empty-state">
-                <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" Size="Size.Large" />
-                <strong>No parking records found</strong>
-                <p>Try a different vehicle number or slot.</p>
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Medium" />
+                <p class="mt-2">Loading records…</p>
             </div>
         }
         else
         {
-            <div class="table-shell">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>Vehicle Number</th>
-                                <th>Owner Name</th>
-                                <th>Slot</th>
-                                <th>Entry Time</th>
-                                <th>Exit Time</th>
-                                <th>Duration</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var record in records)
-                            {
-                                <tr>
-                                    <td><span class="vehicle-plate">@record.VehicleNumber</span></td>
-                                    <td>@record.OwnerName</td>
-                                    <td><span class="badge bg-primary">Slot @record.ParkingSlot?.SlotNumber</span></td>
-                                    <td>@record.EntryTime.ToString("yyyy-MM-dd HH:mm")</td>
-                                    <td>@(record.ExitTime?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
-                                    <td>@FormatDuration(record.Duration)</td>
-                                    <td>
-                                        <span class="badge @(record.IsCompleted ? "bg-success" : "bg-warning")">
-                                            @(record.IsCompleted ? "Completed" : "Active")
-                                        </span>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            @if (viewByVehicle)
+            {
+                if (groupedVehicles.Count == 0)
+                {
+                    <div class="empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" Size="Size.Large" />
+                        <strong>No vehicles found</strong>
+                        <p>Try a different search or check back later.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-shell">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Vehicle Number</th>
+                                        <th>Owner</th>
+                                        <th>Total Sessions</th>
+                                        <th>Completed</th>
+                                        <th>Active</th>
+                                        <th>Total Duration</th>
+                                        <th>Avg Duration</th>
+                                        <th>Last Seen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var v in groupedVehicles)
+                                    {
+                                        <tr>
+                                            <td><span class="vehicle-plate">@v.VehicleNumber</span></td>
+                                            <td>@v.OwnerName</td>
+                                            <td>@v.TotalSessions</td>
+                                            <td>@v.CompletedSessions</td>
+                                            <td>@v.ActiveSessions</td>
+                                            <td>@FormatDuration(v.TotalDuration)</td>
+                                            <td>@FormatDuration(v.AverageDuration)</td>
+                                            <td>@v.LastSeen.ToString("yyyy-MM-dd HH:mm")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <Pager Page="@vehicleCurrentPage"
+                           PageSize="@vehiclePageSize"
+                           TotalCount="@vehicleTotalCount"
+                           PageChanged="OnVehiclePageChanged"
+                           PageSizeChanged="OnVehiclePageSizeChanged" />
+                }
+            }
+            else
+            {
+                if (records.Count == 0)
+                {
+                    <div class="empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" Size="Size.Large" />
+                        <strong>No parking records found</strong>
+                        <p>Try a different vehicle number or slot.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-shell">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Vehicle Number</th>
+                                        <th>Owner Name</th>
+                                        <th>Slot</th>
+                                        <th>Entry Time</th>
+                                        <th>Exit Time</th>
+                                        <th>Duration</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var record in records)
+                                    {
+                                        <tr>
+                                            <td><span class="vehicle-plate">@record.VehicleNumber</span></td>
+                                            <td>@record.OwnerName</td>
+                                            <td><span class="badge bg-primary">Slot @record.ParkingSlot?.SlotNumber</span></td>
+                                            <td>@record.EntryTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                            <td>@(record.ExitTime?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                                            <td>@FormatDuration(record.Duration)</td>
+                                            <td>
+                                                <span class="badge @(record.IsCompleted ? "bg-success" : "bg-warning")">
+                                                    @(record.IsCompleted ? "Completed" : "Active")
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <Pager Page="@currentPage"
+                           PageSize="@currentPageSize"
+                           TotalCount="@totalCount"
+                           PageChanged="OnPageChanged"
+                           PageSizeChanged="OnPageSizeChanged" />
+                }
+            }
         }
     </div>
 </div>
@@ -104,40 +184,157 @@
     private List<ParkingRecord> records = new();
     private string searchTerm = string.Empty;
 
+    // Pagination state. Search term + currentPage + currentPageSize are the only inputs the
+    // server needs; LoadRecords pulls a single page worth of rows via the
+    // service's Skip/Take query.
+    private int currentPage = 1;
+    private int currentPageSize = 10;
+    private int totalCount;
+    private bool isLoading;
+
+    // Vehicle-grouped view state
+    private bool viewByVehicle = false;
+    private List<VehicleGroupedRecords> groupedVehicles = new();
+    private int vehicleCurrentPage = 1;
+    private int vehiclePageSize = 10;
+    private int vehicleTotalCount;
+
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            await LoadRecords();
-        }
-        catch (Exception ex)
-        {
-            records = new();
-            searchTerm = string.Empty;
-            Console.WriteLine($"Failed to load records: {ex.Message}");
-        }
+        await LoadRecords();
     }
 
     private async Task LoadRecords()
     {
-        records = await RecordService.GetAllRecordsAsync();
+        isLoading = true;
+        try
+        {
+            var result = await RecordService.GetRecordsPageAsync(currentPage, currentPageSize, searchTerm);
+            records = result.Items.ToList();
+            totalCount = result.TotalCount;
+
+            // If the current page is now past the end (e.g. after a search
+            // narrows the result set), fall back to the last valid page and
+            // reload so the user never sees an empty grid with a populated
+            // pager.
+            if (records.Count == 0 && totalCount > 0 && currentPage > 1)
+            {
+                currentPage = Math.Max(1, result.TotalPages);
+                var retry = await RecordService.GetRecordsPageAsync(currentPage, currentPageSize, searchTerm);
+                records = retry.Items.ToList();
+                totalCount = retry.TotalCount;
+            }
+        }
+        catch (Exception ex)
+        {
+            records = new();
+            totalCount = 0;
+            Console.WriteLine($"Failed to load records: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
     private async Task Search()
     {
-        if (string.IsNullOrWhiteSpace(searchTerm))
+        // Any new search resets the pager to page 1, otherwise we'd risk
+        // landing on a page that doesn't exist in the filtered result set.
+        if (viewByVehicle)
         {
-            await LoadRecords();
+            vehicleCurrentPage = 1;
+            await LoadGroupedVehiclesPage();
         }
         else
         {
-            records = await RecordService.SearchRecordsAsync(searchTerm);
+            currentPage = 1;
+            await LoadRecords();
         }
     }
 
     private async Task ClearSearch()
     {
         searchTerm = string.Empty;
+        if (viewByVehicle)
+        {
+            vehicleCurrentPage = 1;
+            await LoadGroupedVehiclesPage();
+        }
+        else
+        {
+            currentPage = 1;
+            await LoadRecords();
+        }
+    }
+
+    private async Task LoadGroupedVehiclesPage()
+    {
+        isLoading = true;
+        try
+        {
+            var result = await RecordService.GetRecordsGroupedByVehiclePageAsync(vehicleCurrentPage, vehiclePageSize);
+            groupedVehicles = result.Items.ToList();
+            vehicleTotalCount = result.TotalCount;
+
+            if (groupedVehicles.Count == 0 && vehicleTotalCount > 0 && vehicleCurrentPage > 1)
+            {
+                vehicleCurrentPage = Math.Max(1, result.TotalPages);
+                var retry = await RecordService.GetRecordsGroupedByVehiclePageAsync(vehicleCurrentPage, vehiclePageSize);
+                groupedVehicles = retry.Items.ToList();
+                vehicleTotalCount = retry.TotalCount;
+            }
+        }
+        catch (Exception ex)
+        {
+            groupedVehicles = new();
+            vehicleTotalCount = 0;
+            Console.WriteLine($"Failed to load grouped vehicles: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SetViewMode(bool vehicle)
+    {
+        viewByVehicle = vehicle;
+        if (viewByVehicle)
+        {
+            vehicleCurrentPage = 1;
+            await LoadGroupedVehiclesPage();
+        }
+        else
+        {
+            currentPage = 1;
+            await LoadRecords();
+        }
+    }
+
+    private async Task OnVehiclePageChanged(int newPage)
+    {
+        vehicleCurrentPage = newPage;
+        await LoadGroupedVehiclesPage();
+    }
+
+    private async Task OnVehiclePageSizeChanged(int newSize)
+    {
+        vehiclePageSize = newSize;
+        vehicleCurrentPage = 1;
+        await LoadGroupedVehiclesPage();
+    }
+
+    private async Task OnPageChanged(int newPage)
+    {
+        currentPage = newPage;
+        await LoadRecords();
+    }
+
+    private async Task OnPageSizeChanged(int newSize)
+    {
+        currentPageSize = newSize;
+        currentPage = 1;
         await LoadRecords();
     }
 
@@ -145,4 +342,6 @@
     {
         return duration == null ? "-" : $"{duration.Value.Hours}h {duration.Value.Minutes}m";
     }
+
+    // Export functionality removed per user request
 }

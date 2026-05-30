@@ -398,6 +398,40 @@ curl http://127.0.0.1:5099/health
 
 ## 🐛 Troubleshooting
 
+## Audit & Finalization
+
+- **Audit summary:** project structure verified. Key areas: `Data/` (EF context present, `Data/Migrations/` is empty), `Sql/` (schema + seeds present), `Services/` (business logic and DB initializer), `Components/` (Blazor pages and layout), `Resources/` (assets), `Tools/` (helpers).
+
+- **Decisions & actions to take:**
+   - Decide whether to commit EF Core migrations into `Data/Migrations/` or continue shipping `Sql/init-mysql-schema.sql`. Keep them in sync.
+   - Confirm `smartpark.db` purpose; remove if leftover.
+   - Add a small test harness or document the absence of automated tests.
+   - Optionally add file logging and CI build scripts.
+
+- **E2E & DB:** `run-e2e-ui-db-flow.sh` seeds the DB from `Sql/` and verifies results; it requires the `mysql` CLI and a running MySQL instance (default: `127.0.0.1:3307`). `docker-compose.yml` can start a MySQL service matching defaults.
+
+**Quick checklist (finalize):**
+
+- [ ] Choose migrations vs SQL scripts strategy and update repo accordingly.
+- [ ] Remove unused artifacts (e.g., `smartpark.db`) or document their purpose.
+- [ ] Add minimal unit/integration tests or a note in docs explaining testing strategy.
+- [ ] Add CI build instructions (optional): `dotnet restore && dotnet build`.
+- [ ] Run the E2E flow and verify UI + DB:
+
+```bash
+# Start MySQL for local testing
+docker compose up -d
+
+# Seed DB and run verification (from project folder)
+./run-e2e-ui-db-flow.sh
+
+# Build and run the app (MacCatalyst)
+dotnet build ./Smart-Park.sln -f net10.0-maccatalyst
+dotnet run --project ./SmartPark/SmartPark.csproj -f net10.0-maccatalyst
+```
+
+If you'd like, I can commit a `docs/FINALIZE.md` with this checklist, remove `smartpark.db` if it's not required, and/or add EF migration files. Tell me which you'd prefer and I'll proceed.
+
 ### Build Fails
 
 - Run `dotnet restore`

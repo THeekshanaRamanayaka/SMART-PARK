@@ -22,3 +22,6 @@ Tools/generate_pdfs.py
 Tools/generate_pptx.py
 
 Assignment 3 - ITE 1942 (1).pdf
+
+# Local SQLite DB (ignore if used for local testing)
+smartpark.db
