@@ -124,7 +124,7 @@ INSERT INTO ParkingRecords (VehicleNumber, OwnerName, ParkingSlotId, VehicleId, 
 SELECT 'WP-OP-0123', 'Chamara Gunawardena',
     (SELECT Id FROM ParkingSlots WHERE SlotNumber = 'B-06'),
     (SELECT Id FROM Vehicles     WHERE PlateNormalized = 'WP-OP-0123'),
-    DATE_SUB(NOW(), INTERVAL 1 HOUR - INTERVAL 15 MINUTE),
+    DATE_SUB(NOW(), INTERVAL 75 MINUTE),
     NOW(),
     '01:15:00', 1;
 
